@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+	@apply bg-slate-900 text-slate-100 font-sans;
+}
+
+.glass-card {
+	@apply bg-white/5 border border-white/10 rounded-xl shadow-lg backdrop-blur px-6 py-5;
+}
+
+.pill {
+	@apply inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.btn-primary {
+	@apply bg-primary text-white font-semibold px-4 py-2 rounded-lg shadow hover:bg-blue-600 transition;
+}
+
+.btn-secondary {
+	@apply bg-white/10 text-white font-semibold px-4 py-2 rounded-lg border border-white/10 hover:bg-white/20 transition;
+}
+
+.input {
+	@apply w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary;
+}
+
+/* Make select option text readable on light native dropdowns */
+select.input option{ color: #0f172a; }
+
+/* Ensure date input fields (including year/month/day parts) are readable */
+input[type="date"]{ color: #fff; }
+input[type="date"]::-webkit-datetime-edit, input[type="date"]::-webkit-datetime-edit-year-field, input[type="date"]::-webkit-datetime-edit-month-field, input[type="date"]::-webkit-datetime-edit-day-field{ color: #fff; }
+
+.section-title {
+	@apply text-lg font-semibold text-white flex items-center gap-2;
+}
+
+.holiday-bar-uk{ width: 70%; height: 4px; border-radius: 9999px; background-color: #34d399; }
+.holiday-bar-hk{ width: 70%; height: 4px; border-radius: 9999px; background-color: #fbbf24; }
+.leave-bar-me{ width: 70%; height: 4px; border-radius: 9999px; background-color: #3b82f6; }
+.leave-bar-wife{ width: 70%; height: 4px; border-radius: 9999px; background-color: #fb923c; }
