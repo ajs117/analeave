@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { computeBalances, computeFortnightlyBalanceTimeline, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays, defaultData } from '../utils/leaveService'
+import { computeBalances, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays, defaultData, computeFortnightlyBalanceTimeline } from '../utils/leaveService'
 
 export default function Summary({ data, setData, year }){
   const balances = computeBalances(data, year)
@@ -161,44 +161,63 @@ export default function Summary({ data, setData, year }){
         <div className="space-y-3 border-t border-white/10 pt-4">
           <div className="flex items-center gap-2">
             <span className="pill bg-violet-500/20 text-violet-100">Hidden</span>
-            <h3 className="section-title">Fortnightly Balance</h3>
+            <h3 className="section-title">Balance Detail</h3>
           </div>
           <p className="text-sm text-slate-300">
-            Me: opening carry-over plus 1/26 of the annual allowance every 2 weeks, shown in hours after leave is deducted.
+            Me uses a 2-week accrual view; Wife stays on the standard yearly balance view.
           </p>
 
-          <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="pill bg-blue-500/20 text-blue-100">Me</span>
-              <span className="text-xs text-slate-400">Opening carry-over: {fortnightly.openingHours.toFixed(1)} hours</span>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="pill bg-blue-500/20 text-blue-100">Me</span>
+                <span className="text-xs text-slate-400">Opening carry-over: {fortnightly.openingHours.toFixed(1)} hours</span>
+              </div>
+
+              <div className="text-xs text-slate-300">
+                Base accrual: {fortnightly.accrualHoursPerPeriod.toFixed(2)} hours every 2 weeks at {fortnightly.hoursPerDay.toFixed(1)}h/day.
+              </div>
+
+              {fortnightly.periods.length === 0 ? (
+                <div className="text-sm text-slate-400">No pay periods were generated for this leave year.</div>
+              ) : (
+                <ul className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {fortnightly.periods.map(period => (
+                    <li key={period.index} className="rounded-md border border-white/10 bg-slate-950/20 px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="text-white font-medium">Period {period.index}: {formatDate(period.start)} → {formatDate(period.end)}</span>
+                        <span className="text-slate-300">{period.closingHours.toFixed(1)} hours left</span>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400 flex flex-wrap gap-3">
+                        <span>Opening: {period.openingHours.toFixed(1)}h</span>
+                        <span>+ Accrual: {period.accrualHours.toFixed(1)}h</span>
+                        <span>- Leave: {period.usedHours.toFixed(1)}h ({period.usedDays.toFixed(1)}d)</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="text-xs text-slate-400">
+                Closing balance: {fortnightly.closingHours.toFixed(1)} hours
+              </div>
             </div>
 
-            <div className="text-xs text-slate-300">
-              Base accrual: {fortnightly.accrualHoursPerPeriod.toFixed(2)} hours every 2 weeks at {fortnightly.hoursPerDay.toFixed(1)}h/day.
-            </div>
+            <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="pill bg-orange-500/20 text-orange-100">Wife</span>
+                <span className="text-xs text-slate-400">Year {balances.wife.yearStart} → {balances.wife.yearEnd}</span>
+              </div>
 
-            {fortnightly.periods.length === 0 ? (
-              <div className="text-sm text-slate-400">No pay periods were generated for this leave year.</div>
-            ) : (
-              <ul className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {fortnightly.periods.map(period => (
-                  <li key={period.index} className="rounded-md border border-white/10 bg-slate-950/20 px-3 py-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                      <span className="text-white font-medium">Period {period.index}: {formatDate(period.start)} → {formatDate(period.end)}</span>
-                      <span className="text-slate-300">{period.closingHours.toFixed(1)} hours left</span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-400 flex flex-wrap gap-3">
-                      <span>Opening: {period.openingHours.toFixed(1)}h</span>
-                      <span>+ Accrual: {period.accrualHours.toFixed(1)}h</span>
-                      <span>- Leave: {period.usedHours.toFixed(1)}h ({period.usedDays.toFixed(1)}d)</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div className="text-xs text-slate-400">
-              Closing balance: {fortnightly.closingHours.toFixed(1)} hours
+              <div className="text-xs text-slate-300">
+                {balances.wife.remainingHours.toFixed(1)} hours left at {balances.wife.hoursPerDay.toFixed(1)}h/day.
+              </div>
+              <div className="text-xs text-slate-300">Used: {balances.wife.used.toFixed(1)} / Entitlement: {balances.wife.entitlement.toFixed(1)} days</div>
+              <div className="text-xs text-slate-300">Carry: {balances.wife.carry.toFixed(1)} days • Purchased: {balances.wife.purchased.toFixed(1)} days</div>
+              <div className="text-xs text-amber-200">Must use: {balances.wife.mustUse?.toFixed(1) ?? '0.0'} days</div>
+              <div className="text-xs text-slate-400">
+                Wife is kept as a yearly balance view, not a fortnightly accrual schedule.
+              </div>
             </div>
           </div>
         </div>
