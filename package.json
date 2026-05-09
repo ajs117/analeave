@@ -2,9 +2,14 @@
   "name": "ana-leave",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ajs117/analeave.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "deploy": "node scripts/deploy-ghpages.js",
     "preview": "vite preview"
   },
   "dependencies": {
