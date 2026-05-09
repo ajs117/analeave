@@ -248,6 +248,78 @@ export function computeDrawdownTimeline(data, viewYear = new Date().getFullYear(
   return result
 }
 
+export function computeFortnightlyBalanceTimeline(data, person = 'me', viewYear = new Date().getFullYear()){
+  const balances = computeBalances(data, viewYear)
+  const balance = balances[person]
+  const personData = data.people[person]
+  if(!balance || !personData) return { person, periods: [], openingHours: 0, accrualHoursPerPeriod: 0, closingHours: 0 }
+
+  const hoursPerDay = Number(personData.hoursPerDay) || 8
+  const start = new Date(balance.yearStart)
+  const end = new Date(balance.yearEnd)
+  const carryOverHours = (balance.carry || 0) * hoursPerDay
+  const accrualHoursPerPeriod = ((Number(personData.entitlement) || 0) / 26) * hoursPerDay
+  const periodLengthDays = 14
+  const periodCount = 26
+
+  const leaveEntries = (data.entries || [])
+    .filter(entry => entry.person === person && !(new Date(entry.end) < start || new Date(entry.start) > end))
+    .map(entry => ({
+      ...entry,
+      clippedStart: new Date(entry.start) < start ? dateToLocalISO(start) : entry.start,
+      clippedEnd: new Date(entry.end) > end ? dateToLocalISO(end) : entry.end,
+    }))
+
+  const periods = []
+  let runningBalance = carryOverHours
+
+  for(let index = 0; index < periodCount; index++){
+    const periodStart = new Date(start)
+    periodStart.setDate(periodStart.getDate() + (index * periodLengthDays))
+    const periodEnd = new Date(periodStart)
+    periodEnd.setDate(periodEnd.getDate() + (periodLengthDays - 1))
+    if(periodStart > end) break
+    if(periodEnd > end) periodEnd.setTime(end.getTime())
+
+    const periodStartIso = dateToLocalISO(periodStart)
+    const periodEndIso = dateToLocalISO(periodEnd)
+
+    const usedDays = leaveEntries
+      .filter(entry => !(new Date(entry.clippedEnd) < periodStart || new Date(entry.clippedStart) > periodEnd))
+      .reduce((sum, entry) => {
+        const overlapStart = new Date(entry.clippedStart) < periodStart ? periodStartIso : entry.clippedStart
+        const overlapEnd = new Date(entry.clippedEnd) > periodEnd ? periodEndIso : entry.clippedEnd
+        return sum + workingDaysInRange(overlapStart, overlapEnd)
+      }, 0)
+
+    const usedHours = usedDays * hoursPerDay
+    const openingHours = runningBalance
+    const closingHours = openingHours + accrualHoursPerPeriod - usedHours
+
+    periods.push({
+      index: index + 1,
+      start: periodStartIso,
+      end: periodEndIso,
+      openingHours,
+      accrualHours: accrualHoursPerPeriod,
+      usedDays,
+      usedHours,
+      closingHours,
+    })
+
+    runningBalance = closingHours
+  }
+
+  return {
+    person,
+    hoursPerDay,
+    openingHours: carryOverHours,
+    accrualHoursPerPeriod,
+    periods,
+    closingHours: runningBalance,
+  }
+}
+
 function clamp(n, min, max){
   const num = Number.isFinite(n) ? n : 0
   if(max !== undefined && num > max) return max

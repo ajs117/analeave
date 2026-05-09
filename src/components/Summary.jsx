@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react'
-import { computeBalances, computeDrawdownTimeline, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays } from '../utils/leaveService'
+import { computeBalances, computeFortnightlyBalanceTimeline, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays, defaultData } from '../utils/leaveService'
 
 export default function Summary({ data, setData, year }){
   const balances = computeBalances(data, year)
-  const drawdown = useMemo(() => computeDrawdownTimeline(data, year), [data, year])
+  const fortnightly = useMemo(() => computeFortnightlyBalanceTimeline(data, 'me', year), [data, year])
   const [showDrawdown, setShowDrawdown] = useState(false)
 
   const remove = (id)=>{
@@ -20,8 +20,30 @@ export default function Summary({ data, setData, year }){
     const f = ev.target.files[0]
     if(!f) return
     const reader = new FileReader()
-    reader.onload = () => setData(JSON.parse(reader.result))
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result)
+        const nextData = loadDataFromParsed(parsed)
+        setData(nextData)
+      } catch (_error) {
+        // Keep the current data if the import is invalid.
+      }
+    }
     reader.readAsText(f)
+  }
+
+  const loadDataFromParsed = (parsed) => {
+    const parsedPeople = parsed?.people || {}
+    return {
+      ...structuredClone(defaultData),
+      ...parsed,
+      people: {
+        me: { ...defaultData.people.me, ...(parsedPeople.me || {}) },
+        wife: { ...defaultData.people.wife, ...(parsedPeople.wife || {}) },
+      },
+      entries: parsed?.entries || [],
+      adjustments: parsed?.adjustments || [],
+    }
   }
 
   const updateAdjustment = (person, field, value)=>{
@@ -139,49 +161,45 @@ export default function Summary({ data, setData, year }){
         <div className="space-y-3 border-t border-white/10 pt-4">
           <div className="flex items-center gap-2">
             <span className="pill bg-violet-500/20 text-violet-100">Hidden</span>
-            <h3 className="section-title">Drawdown by Interval</h3>
+            <h3 className="section-title">Fortnightly Balance</h3>
           </div>
           <p className="text-sm text-slate-300">
-            Remaining hours after each leave interval, using {balances.me.hoursPerDay.toFixed(1)} hours/day for me and {balances.wife.hoursPerDay.toFixed(1)} hours/day for wife.
+            Me: opening carry-over plus 1/26 of the annual allowance every 2 weeks, shown in hours after leave is deducted.
           </p>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            {Object.keys(drawdown).map(person => {
-              const personTimeline = drawdown[person]
-              return (
-                <div key={person} className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={person === 'me' ? 'pill bg-blue-500/20 text-blue-100' : 'pill bg-orange-500/20 text-orange-100'}>
-                      {data.people[person].label}
-                    </span>
-                    <span className="text-xs text-slate-400">Opening: {personTimeline.openingHours.toFixed(1)} hours</span>
-                  </div>
+          <div className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="pill bg-blue-500/20 text-blue-100">Me</span>
+              <span className="text-xs text-slate-400">Opening carry-over: {fortnightly.openingHours.toFixed(1)} hours</span>
+            </div>
 
-                  {personTimeline.intervals.length === 0 ? (
-                    <div className="text-sm text-slate-400">No leave intervals in this leave year.</div>
-                  ) : (
-                    <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                      {personTimeline.intervals.map(interval => (
-                        <li key={interval.id} className="rounded-md border border-white/10 bg-slate-950/20 px-3 py-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                            <span className="text-white font-medium">{formatDate(interval.start)} → {formatDate(interval.end)}</span>
-                            <span className="text-slate-300">-{interval.hours.toFixed(1)}h ({interval.days.toFixed(1)}d)</span>
-                          </div>
-                          <div className="mt-1 text-xs text-slate-400 flex flex-wrap items-center gap-2">
-                            <span>Remaining: {interval.remainingHours.toFixed(1)} hours</span>
-                            {interval.note && <span>• {interval.note}</span>}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+            <div className="text-xs text-slate-300">
+              Base accrual: {fortnightly.accrualHoursPerPeriod.toFixed(2)} hours every 2 weeks at {fortnightly.hoursPerDay.toFixed(1)}h/day.
+            </div>
 
-                  <div className="text-xs text-slate-400">
-                    Closing balance: {personTimeline.closingHours.toFixed(1)} hours
-                  </div>
-                </div>
-              )
-            })}
+            {fortnightly.periods.length === 0 ? (
+              <div className="text-sm text-slate-400">No pay periods were generated for this leave year.</div>
+            ) : (
+              <ul className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {fortnightly.periods.map(period => (
+                  <li key={period.index} className="rounded-md border border-white/10 bg-slate-950/20 px-3 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <span className="text-white font-medium">Period {period.index}: {formatDate(period.start)} → {formatDate(period.end)}</span>
+                      <span className="text-slate-300">{period.closingHours.toFixed(1)} hours left</span>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400 flex flex-wrap gap-3">
+                      <span>Opening: {period.openingHours.toFixed(1)}h</span>
+                      <span>+ Accrual: {period.accrualHours.toFixed(1)}h</span>
+                      <span>- Leave: {period.usedHours.toFixed(1)}h ({period.usedDays.toFixed(1)}d)</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="text-xs text-slate-400">
+              Closing balance: {fortnightly.closingHours.toFixed(1)} hours
+            </div>
           </div>
         </div>
       )}
