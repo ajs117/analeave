@@ -1,8 +1,10 @@
-import React from 'react'
-import { computeBalances, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays } from '../utils/leaveService'
+import React, { useMemo, useState } from 'react'
+import { computeBalances, computeDrawdownTimeline, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays } from '../utils/leaveService'
 
 export default function Summary({ data, setData, year }){
   const balances = computeBalances(data, year)
+  const drawdown = useMemo(() => computeDrawdownTimeline(data, year), [data, year])
+  const [showDrawdown, setShowDrawdown] = useState(false)
 
   const remove = (id)=>{
     setData(prev => ({...prev, entries: prev.entries.filter(e=>e.id!==id)}))
@@ -55,6 +57,9 @@ export default function Summary({ data, setData, year }){
                 return <span className={neg}>{rem.toFixed(1)} days</span>
               })()}
             </div>
+            <div className="text-xs text-slate-300">
+              {balances[key].remainingHours.toFixed(1)} hours left at {balances[key].hoursPerDay.toFixed(1)}h/day
+            </div>
             <div className="text-xs text-slate-400">Year {balances[key].yearStart} → {balances[key].yearEnd}</div>
             <div className="text-xs text-slate-300">Used: {balances[key].used.toFixed(1)} / Entitlement: {balances[key].entitlement.toFixed(1)}</div>
             <div className="text-xs text-amber-200">Must use: {balances[key].mustUse?.toFixed(1) ?? '0.0'} days</div>
@@ -100,7 +105,10 @@ export default function Summary({ data, setData, year }){
 
       <div className="flex items-center justify-between">
         <h3 className="section-title">Entries</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 justify-end">
+          <button className="btn-secondary" type="button" onClick={()=>setShowDrawdown(v=>!v)}>
+            {showDrawdown ? 'Hide drawdown' : 'Show drawdown'}
+          </button>
           <button className="btn-secondary" onClick={exportJSON}>Export</button>
           <label className="btn-secondary cursor-pointer">
             Import <input className="hidden" type="file" onChange={importJSON} />
@@ -126,6 +134,57 @@ export default function Summary({ data, setData, year }){
           </li>
         ))}
       </ul>
+
+      {showDrawdown && (
+        <div className="space-y-3 border-t border-white/10 pt-4">
+          <div className="flex items-center gap-2">
+            <span className="pill bg-violet-500/20 text-violet-100">Hidden</span>
+            <h3 className="section-title">Drawdown by Interval</h3>
+          </div>
+          <p className="text-sm text-slate-300">
+            Remaining hours after each leave interval, using {balances.me.hoursPerDay.toFixed(1)} hours/day for me and {balances.wife.hoursPerDay.toFixed(1)} hours/day for wife.
+          </p>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {Object.keys(drawdown).map(person => {
+              const personTimeline = drawdown[person]
+              return (
+                <div key={person} className="bg-white/5 border border-white/10 rounded-lg p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={person === 'me' ? 'pill bg-blue-500/20 text-blue-100' : 'pill bg-orange-500/20 text-orange-100'}>
+                      {data.people[person].label}
+                    </span>
+                    <span className="text-xs text-slate-400">Opening: {personTimeline.openingHours.toFixed(1)} hours</span>
+                  </div>
+
+                  {personTimeline.intervals.length === 0 ? (
+                    <div className="text-sm text-slate-400">No leave intervals in this leave year.</div>
+                  ) : (
+                    <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {personTimeline.intervals.map(interval => (
+                        <li key={interval.id} className="rounded-md border border-white/10 bg-slate-950/20 px-3 py-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                            <span className="text-white font-medium">{formatDate(interval.start)} → {formatDate(interval.end)}</span>
+                            <span className="text-slate-300">-{interval.hours.toFixed(1)}h ({interval.days.toFixed(1)}d)</span>
+                          </div>
+                          <div className="mt-1 text-xs text-slate-400 flex flex-wrap items-center gap-2">
+                            <span>Remaining: {interval.remainingHours.toFixed(1)} hours</span>
+                            {interval.note && <span>• {interval.note}</span>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="text-xs text-slate-400">
+                    Closing balance: {personTimeline.closingHours.toFixed(1)} hours
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

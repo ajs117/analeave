@@ -5,8 +5,8 @@ const id = ()=> Date.now().toString(36) + Math.random().toString(36).slice(2,8)
 
 export const defaultData = {
   people: {
-    me: { label: 'Me', yearStartMonth: 9, entitlement:25, carryOverLimit:5, maxEarned:5, region:'UK' },
-    wife: { label: 'Wife', yearStartMonth: 1, entitlement:25, carryOverLimit:5, maxPurchased:15, region:'HK' }
+    me: { label: 'Me', yearStartMonth: 9, entitlement:25, carryOverLimit:5, maxEarned:5, region:'UK', hoursPerDay: 7.5 },
+    wife: { label: 'Wife', yearStartMonth: 1, entitlement:25, carryOverLimit:5, maxPurchased:15, region:'HK', hoursPerDay: 8 }
   },
   entries: [],
   adjustments: [] // per person per leave-year: carryOver, purchased, earned
@@ -17,10 +17,14 @@ export function loadData(){
     const raw = localStorage.getItem('ana-leave')
     if(!raw) return structuredClone(defaultData)
     const parsed = JSON.parse(raw)
+    const parsedPeople = parsed.people || {}
     return {
       ...defaultData,
       ...parsed,
-      people: { ...defaultData.people, ...(parsed.people || {}) },
+      people: {
+        me: { ...defaultData.people.me, ...(parsedPeople.me || {}) },
+        wife: { ...defaultData.people.wife, ...(parsedPeople.wife || {}) },
+      },
       entries: parsed.entries || [],
       adjustments: parsed.adjustments || []
     }
@@ -116,6 +120,7 @@ export function computeBalances(data, viewYear = new Date().getFullYear()){
   const res = {}
   Object.keys(data.people).forEach(k=>{
     const p = data.people[k]
+    const hoursPerDay = Number(p.hoursPerDay) || 8
     const { yearStart, yearEnd } = getYearWindowForView(p.yearStartMonth, viewYear)
     const yearStartYear = yearStart.getFullYear()
 
@@ -164,23 +169,83 @@ export function computeBalances(data, viewYear = new Date().getFullYear()){
 
     const entitlement = p.entitlement + carry + purchased + earned
     const remaining = entitlement - used
+    const entitlementHours = entitlement * hoursPerDay
+    const usedHours = used * hoursPerDay
+    const remainingHours = remaining * hoursPerDay
 
     const mustUse = Math.max(0, remaining - (p.carryOverLimit ?? 0))
 
     res[k] = {
       remaining,
+      remainingHours,
       used,
+      usedHours,
       entitlement,
+      entitlementHours,
       carry,
       mustUse,
       purchased,
       earned,
+      hoursPerDay,
       yearStart: dateToLocalISO(yearStart),
       yearEnd: dateToLocalISO(yearEnd),
       yearStartYear
     }
   })
   return res
+}
+
+export function computeDrawdownTimeline(data, viewYear = new Date().getFullYear()){
+  const balances = computeBalances(data, viewYear)
+  const result = {}
+
+  Object.keys(data.people).forEach(person => {
+    const balance = balances[person]
+    const personData = data.people[person]
+    const hoursPerDay = Number(personData.hoursPerDay) || 8
+    const start = new Date(balance.yearStart)
+    const end = new Date(balance.yearEnd)
+
+    const relevantEntries = (data.entries || [])
+      .filter(entry => entry.person === person && !(new Date(entry.end) < start || new Date(entry.start) > end))
+      .map(entry => {
+        const clippedStart = new Date(entry.start) < start ? dateToLocalISO(start) : entry.start
+        const clippedEnd = new Date(entry.end) > end ? dateToLocalISO(end) : entry.end
+        const days = workingDaysInRange(clippedStart, clippedEnd)
+        return {
+          id: entry.id,
+          start: clippedStart,
+          end: clippedEnd,
+          note: entry.note || '',
+          days,
+          hours: days * hoursPerDay,
+        }
+      })
+      .sort((left, right) => {
+        const leftStart = new Date(left.start).getTime()
+        const rightStart = new Date(right.start).getTime()
+        if(leftStart !== rightStart) return leftStart - rightStart
+        return new Date(left.end).getTime() - new Date(right.end).getTime()
+      })
+
+    let remainingHours = balance.entitlementHours
+    const intervals = relevantEntries.map(entry => {
+      remainingHours -= entry.hours
+      return {
+        ...entry,
+        remainingHours,
+      }
+    })
+
+    result[person] = {
+      hoursPerDay,
+      openingHours: balance.entitlementHours,
+      intervals,
+      closingHours: remainingHours,
+    }
+  })
+
+  return result
 }
 
 function clamp(n, min, max){
