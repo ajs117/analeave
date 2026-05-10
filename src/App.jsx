@@ -2,70 +2,120 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import LeaveForm from './components/LeaveForm'
 import Summary from './components/Summary'
 import YearCalendar from './components/YearCalendar'
-import { loadData, normalizeData, readDataFromFile, saveDataToFileHandle } from './utils/leaveService'
+import { clearLinkedFileHandle, getLinkedFilePermission, loadData, loadLinkedFileHandle, readDataFromFile, saveDataToFileHandle, saveLinkedFileHandle, supportsLinkedFiles } from './utils/leaveService'
 
 export default function App(){
   const [data, setData] = useState(() => loadData())
   const [year, setYear] = useState(() => new Date().getFullYear())
   const fileHandleRef = useRef(null)
-  const openFileInputRef = useRef(null)
-  const [fileName, setFileName] = useState('No file selected')
+  const [fileName, setFileName] = useState('No data file linked')
+  const [fileStatus, setFileStatus] = useState('Choose or create a data file to enable autosave.')
+  const [startupReady, setStartupReady] = useState(false)
+  const linkedFilesSupported = supportsLinkedFiles()
 
   useEffect(()=>{
-    if(!fileHandleRef.current) return
-    void saveDataToFileHandle(data, fileHandleRef.current)
-  }, [data])
+    let cancelled = false
 
-  const openDataFile = async ()=>{
-    if(typeof window !== 'undefined' && 'showOpenFilePicker' in window){
+    const restoreLinkedFile = async ()=>{
+      if(!linkedFilesSupported){
+        setFileStatus('This browser cannot remember a linked file. Use a Chromium browser for autoload and autosave.')
+        setStartupReady(true)
+        return
+      }
+
       try{
-        const [handle] = await window.showOpenFilePicker({
-          multiple: false,
-          types: [{ description: 'Leave data', accept: { 'application/json': ['.json'] } }],
-        })
+        const handle = await loadLinkedFileHandle()
+        if(!handle){
+          setStartupReady(true)
+          return
+        }
+
+        setFileName(handle.name || 'Linked data file')
+        const permission = await getLinkedFilePermission(handle, { request: false, write: true })
+        if(permission !== 'granted'){
+          setFileStatus('Linked file found. Choose the file again to reconnect write access.')
+          setStartupReady(true)
+          return
+        }
+
         const nextData = await readDataFromFile(await handle.getFile())
+        if(cancelled) return
+
         fileHandleRef.current = handle
-        setFileName(handle.name)
         setData(nextData)
-      }catch(_error){}
-      return
+        setFileStatus(`Autosaving to ${handle.name}.`)
+      }catch(_error){
+        await clearLinkedFileHandle().catch(() => {})
+        if(cancelled) return
+        fileHandleRef.current = null
+        setFileName('No data file linked')
+        setFileStatus('The linked file could not be reopened. Choose or create it again.')
+      }finally{
+        if(!cancelled) setStartupReady(true)
+      }
     }
-    openFileInputRef.current?.click()
+
+    void restoreLinkedFile()
+    return ()=>{ cancelled = true }
+  }, [linkedFilesSupported])
+
+  useEffect(()=>{
+    if(!startupReady || !fileHandleRef.current) return
+
+    let cancelled = false
+    const persist = async ()=>{
+      try{
+        const permission = await getLinkedFilePermission(fileHandleRef.current, { request: false, write: true })
+        if(permission !== 'granted'){
+          if(!cancelled) setFileStatus('Write access was lost. Choose the file again to resume autosave.')
+          return
+        }
+
+        await saveDataToFileHandle(data, fileHandleRef.current)
+        if(!cancelled) setFileStatus(`Autosaving to ${fileHandleRef.current.name}.`)
+      }catch(_error){
+        if(!cancelled) setFileStatus('Autosave failed. Choose the file again to reconnect it.')
+      }
+    }
+
+    void persist()
+    return ()=>{ cancelled = true }
+  }, [data, startupReady])
+
+  const linkFileHandle = async (handle, { loadContents } = { loadContents: true })=>{
+    const permission = await getLinkedFilePermission(handle, { request: true, write: true })
+    if(permission !== 'granted') return
+
+    const nextData = loadContents ? await readDataFromFile(await handle.getFile()) : data
+
+    fileHandleRef.current = handle
+    await saveLinkedFileHandle(handle)
+    setFileName(handle.name || 'Linked data file')
+    setFileStatus(`Autosaving to ${handle.name}.`)
+    if(loadContents) setData(nextData)
+    else await saveDataToFileHandle(data, handle)
   }
 
-  const importFromInput = async (ev)=>{
-    const file = ev.target.files?.[0]
-    if(!file) return
+  const openDataFile = async ()=>{
+    if(!linkedFilesSupported) return
     try{
-      const nextData = await readDataFromFile(file)
-      fileHandleRef.current = null
-      setFileName(file.name)
-      setData(nextData)
+      const [handle] = await window.showOpenFilePicker({
+        multiple: false,
+        types: [{ description: 'Leave data', accept: { 'application/json': ['.json'] } }],
+      })
+      await linkFileHandle(handle, { loadContents: true })
     }catch(_error){}
-    ev.target.value = ''
   }
 
   const saveDataAs = async ()=>{
-    if(typeof window !== 'undefined' && 'showSaveFilePicker' in window){
-      try{
-        const handle = await window.showSaveFilePicker({
-          suggestedName: fileName && fileName !== 'No file selected' ? fileName : 'leave-data.json',
-          types: [{ description: 'Leave data', accept: { 'application/json': ['.json'] } }],
-        })
-        fileHandleRef.current = handle
-        setFileName(handle.name)
-        await saveDataToFileHandle(data, handle)
-      }catch(_error){}
-      return
-    }
-
-    const blob = new Blob([JSON.stringify(normalizeData(data), null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = fileName && fileName !== 'No file selected' ? fileName : 'leave-data.json'
-    a.click()
-    URL.revokeObjectURL(url)
+    if(!linkedFilesSupported) return
+    try{
+      const handle = await window.showSaveFilePicker({
+        suggestedName: fileName && fileName !== 'No data file linked' ? fileName : 'leave-data.json',
+        types: [{ description: 'Leave data', accept: { 'application/json': ['.json'] } }],
+      })
+      await linkFileHandle(handle, { loadContents: false })
+    }catch(_error){}
   }
 
   const yearsAvailable = useMemo(()=>{
@@ -92,13 +142,19 @@ export default function App(){
             <p className="text-sm text-slate-300">Annual leave, carryover, and bank holidays</p>
             <h1 className="text-3xl font-bold text-white">Analeave</h1>
           </div>
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-slate-200">Calendar year</label>
-            <select className="input w-32" value={year} onChange={e=>setYear(parseInt(e.target.value,10))}>
-              {yearsAvailable.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <button className="btn-secondary" type="button" onClick={openDataFile}>Open file</button>
-            <button className="btn-secondary" type="button" onClick={saveDataAs}>Save file</button>
+          <div className="flex flex-col items-start gap-2 lg:items-end">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="text-sm text-slate-200">Calendar year</label>
+              <select className="input w-32" value={year} onChange={e=>setYear(parseInt(e.target.value,10))}>
+                {yearsAvailable.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <button className="btn-secondary" type="button" onClick={openDataFile} disabled={!linkedFilesSupported}>Choose file</button>
+              <button className="btn-secondary" type="button" onClick={saveDataAs} disabled={!linkedFilesSupported}>Create file</button>
+            </div>
+            <div className="text-xs text-slate-400 text-left lg:text-right">
+              <div>Linked file: {fileName}</div>
+              <div>{fileStatus}</div>
+            </div>
           </div>
         </header>
 
@@ -113,9 +169,8 @@ export default function App(){
         </div>
 
         <footer className="text-slate-400 text-sm">
-          Data is saved to the file you open or save. If your browser does not support file access, use Import/Export in Summary.
+          Choose a data file once and this browser will reopen it and autosave to it when permission is still available.
         </footer>
-        <input ref={openFileInputRef} className="hidden" type="file" accept="application/json,.json" onChange={importFromInput} />
       </div>
     </div>
   )

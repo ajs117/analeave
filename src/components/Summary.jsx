@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { computeBalances, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays, normalizeData, computeFortnightlyBalanceTimeline, computeDrawdownTimeline, saveDataToFileHandle } from '../utils/leaveService'
+import { computeBalances, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays, computeFortnightlyBalanceTimeline, computeDrawdownTimeline } from '../utils/leaveService'
 
 export default function Summary({ data, setData, year }){
   const balances = computeBalances(data, year)
@@ -129,10 +129,6 @@ export default function Summary({ data, setData, year }){
           <button className="btn-secondary" type="button" onClick={()=>setShowDrawdown(v=>!v)}>
             {showDrawdown ? 'Hide drawdown' : 'Show drawdown'}
           </button>
-          <button className="btn-secondary" onClick={exportJSON}>Export</button>
-          <label className="btn-secondary cursor-pointer">
-            Import <input className="hidden" type="file" onChange={importJSON} />
-          </label>
         </div>
       </div>
 
@@ -162,7 +158,7 @@ export default function Summary({ data, setData, year }){
             <h3 className="section-title">Balance Detail</h3>
           </div>
           <p className="text-sm text-slate-300">
-            Me uses a 2-week accrual view; Wife stays on the standard yearly balance view.
+            Me uses a 2-week accrual view; Wife uses a descending balance ledger by leave entry.
           </p>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -238,7 +234,7 @@ export default function Summary({ data, setData, year }){
               )}
 
               <div className="text-xs text-slate-400">
-                Closing balance: {wifeLedger.closingHours.toFixed(1)} hours
+                Closing balance: {(wifeDrawdown.wife?.closingHours ?? balances.wife.remainingHours).toFixed(1)} hours
               </div>
             </div>
           </div>

@@ -30,6 +30,74 @@ export function loadData(){
   return structuredClone(defaultData)
 }
 
+const FILE_DB_NAME = 'ana-leave'
+const FILE_STORE_NAME = 'linked-files'
+const ACTIVE_FILE_KEY = 'active-data-file'
+
+function openFileDb(){
+  return new Promise((resolve, reject) => {
+    if(typeof indexedDB === 'undefined'){
+      reject(new Error('IndexedDB is not available'))
+      return
+    }
+
+    const request = indexedDB.open(FILE_DB_NAME, 1)
+    request.onupgradeneeded = () => {
+      if(!request.result.objectStoreNames.contains(FILE_STORE_NAME)){
+        request.result.createObjectStore(FILE_STORE_NAME)
+      }
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error || new Error('Failed to open IndexedDB'))
+  })
+}
+
+function withFileStore(mode, action){
+  return openFileDb().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(FILE_STORE_NAME, mode)
+    const store = tx.objectStore(FILE_STORE_NAME)
+    const request = action(store)
+
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error || new Error('IndexedDB request failed'))
+    tx.oncomplete = () => db.close()
+    tx.onabort = () => {
+      db.close()
+      reject(tx.error || new Error('IndexedDB transaction aborted'))
+    }
+  }))
+}
+
+export function supportsLinkedFiles(){
+  return typeof window !== 'undefined'
+    && 'showOpenFilePicker' in window
+    && 'showSaveFilePicker' in window
+    && typeof indexedDB !== 'undefined'
+}
+
+export function loadLinkedFileHandle(){
+  return withFileStore('readonly', store => store.get(ACTIVE_FILE_KEY))
+}
+
+export function saveLinkedFileHandle(handle){
+  return withFileStore('readwrite', store => store.put(handle, ACTIVE_FILE_KEY))
+}
+
+export function clearLinkedFileHandle(){
+  return withFileStore('readwrite', store => store.delete(ACTIVE_FILE_KEY))
+}
+
+export async function getLinkedFilePermission(handle, { request = false, write = true } = {}){
+  if(!handle) return 'denied'
+  const options = write ? { mode: 'readwrite' } : {}
+  if(typeof handle.queryPermission === 'function'){
+    const permission = await handle.queryPermission(options)
+    if(permission === 'granted' || !request || typeof handle.requestPermission !== 'function') return permission
+    return handle.requestPermission(options)
+  }
+  return 'granted'
+}
+
 export async function readDataFromFile(file){
   const text = await file.text()
   return normalizeData(JSON.parse(text))
