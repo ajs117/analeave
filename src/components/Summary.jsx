@@ -4,8 +4,8 @@ import { computeBalances, formatDate, getAdjustmentRecord, upsertAdjustment, get
 export default function Summary({ data, setData, year }){
   const balances = computeBalances(data, year)
   const fortnightly = useMemo(() => computeFortnightlyBalanceTimeline(data, 'me', year), [data, year])
-  const wifeLedger = useMemo(() => computeDrawdownTimeline(data, 'wife', year), [data, year])
-  const wifeLedgerDescending = useMemo(() => [...wifeLedger.intervals].reverse(), [wifeLedger])
+  const wifeDrawdown = useMemo(() => computeDrawdownTimeline(data, year), [data, year])
+  const wifeLedgerDescending = useMemo(() => [...(wifeDrawdown.wife?.intervals || [])].reverse(), [wifeDrawdown])
   const [showDrawdown, setShowDrawdown] = useState(false)
   const sortedEntries = useMemo(() => {
     return [...data.entries].sort((left, right) => {
