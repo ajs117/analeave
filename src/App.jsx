@@ -8,17 +8,28 @@ export default function App(){
   const [data, setData] = useState(() => loadData())
   const [year, setYear] = useState(() => new Date().getFullYear())
   const fileHandleRef = useRef(null)
+  const openFileInputRef = useRef(null)
   const [fileName, setFileName] = useState('No data file linked')
   const [fileStatus, setFileStatus] = useState('Choose or create a data file to enable autosave.')
   const [startupReady, setStartupReady] = useState(false)
   const linkedFilesSupported = supportsLinkedFiles()
+
+  const downloadDataFile = (nextName = fileName) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = nextName && nextName !== 'No data file linked' ? nextName : 'leave-data.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   useEffect(()=>{
     let cancelled = false
 
     const restoreLinkedFile = async ()=>{
       if(!linkedFilesSupported){
-        setFileStatus('This browser cannot remember a linked file. Use a Chromium browser for autoload and autosave.')
+        setFileStatus('This browser can load and save files, but it cannot keep a live link for autosave. On iPad use Choose file, then Save file after changes.')
         setStartupReady(true)
         return
       }
@@ -97,7 +108,10 @@ export default function App(){
   }
 
   const openDataFile = async ()=>{
-    if(!linkedFilesSupported) return
+    if(!linkedFilesSupported){
+      openFileInputRef.current?.click()
+      return
+    }
     try{
       const [handle] = await window.showOpenFilePicker({
         multiple: false,
@@ -107,8 +121,25 @@ export default function App(){
     }catch(_error){}
   }
 
+  const importFromInput = async (ev)=>{
+    const file = ev.target.files?.[0]
+    if(!file) return
+    try{
+      const nextData = await readDataFromFile(file)
+      fileHandleRef.current = null
+      setData(nextData)
+      setFileName(file.name)
+      setFileStatus('Loaded from file. This browser cannot autosave back to the same file, so use Save file after changes.')
+    }catch(_error){}
+    ev.target.value = ''
+  }
+
   const saveDataAs = async ()=>{
-    if(!linkedFilesSupported) return
+    if(!linkedFilesSupported){
+      downloadDataFile()
+      setFileStatus('Saved a fresh copy of the current data. On this browser, save again after changes.')
+      return
+    }
     try{
       const handle = await window.showSaveFilePicker({
         suggestedName: fileName && fileName !== 'No data file linked' ? fileName : 'leave-data.json',
@@ -142,16 +173,18 @@ export default function App(){
             <p className="text-sm text-slate-300">Annual leave, carryover, and bank holidays</p>
             <h1 className="text-3xl font-bold text-white">Analeave</h1>
           </div>
-          <div className="flex flex-col items-start gap-2 lg:items-end">
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="text-sm text-slate-200">Calendar year</label>
-              <select className="input w-32" value={year} onChange={e=>setYear(parseInt(e.target.value,10))}>
+          <div className="w-full max-w-xl space-y-3 lg:w-auto">
+            <div className="grid gap-3 md:grid-cols-[auto_minmax(0,8rem)] md:items-center md:justify-end">
+              <label className="text-sm text-slate-200 md:text-right">Calendar year</label>
+              <select className="input w-full md:w-32" value={year} onChange={e=>setYear(parseInt(e.target.value,10))}>
                 {yearsAvailable.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
-              <button className="btn-secondary" type="button" onClick={openDataFile} disabled={!linkedFilesSupported}>Choose file</button>
-              <button className="btn-secondary" type="button" onClick={saveDataAs} disabled={!linkedFilesSupported}>Create file</button>
             </div>
-            <div className="text-xs text-slate-400 text-left lg:text-right">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button className="btn-secondary w-full" type="button" onClick={openDataFile}>Choose file</button>
+              <button className="btn-secondary w-full" type="button" onClick={saveDataAs}>Save file</button>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-400">
               <div>Linked file: {fileName}</div>
               <div>{fileStatus}</div>
             </div>
@@ -169,8 +202,11 @@ export default function App(){
         </div>
 
         <footer className="text-slate-400 text-sm">
-          Choose a data file once and this browser will reopen it and autosave to it when permission is still available.
+          {linkedFilesSupported
+            ? 'Choose a data file once and this browser will reopen it and autosave to it when permission is still available.'
+            : 'On iPad and other unsupported browsers, choose a file to load it and use Save file to download updates.'}
         </footer>
+        <input ref={openFileInputRef} className="hidden" type="file" accept="application/json,.json" onChange={importFromInput} />
       </div>
     </div>
   )
