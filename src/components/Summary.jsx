@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react'
-import { computeBalances, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays, defaultData, computeFortnightlyBalanceTimeline } from '../utils/leaveService'
+import { computeBalances, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays, normalizeData, computeFortnightlyBalanceTimeline, computeDrawdownTimeline, saveDataToFileHandle } from '../utils/leaveService'
 
 export default function Summary({ data, setData, year }){
   const balances = computeBalances(data, year)
   const fortnightly = useMemo(() => computeFortnightlyBalanceTimeline(data, 'me', year), [data, year])
+  const wifeLedger = useMemo(() => computeDrawdownTimeline(data, 'wife', year), [data, year])
+  const wifeLedgerDescending = useMemo(() => [...wifeLedger.intervals].reverse(), [wifeLedger])
   const [showDrawdown, setShowDrawdown] = useState(false)
   const sortedEntries = useMemo(() => {
     return [...data.entries].sort((left, right) => {
@@ -34,27 +36,12 @@ export default function Summary({ data, setData, year }){
     reader.onload = () => {
       try {
         const parsed = JSON.parse(reader.result)
-        const nextData = loadDataFromParsed(parsed)
-        setData(nextData)
+        setData(normalizeData(parsed))
       } catch (_error) {
         // Keep the current data if the import is invalid.
       }
     }
     reader.readAsText(f)
-  }
-
-  const loadDataFromParsed = (parsed) => {
-    const parsedPeople = parsed?.people || {}
-    return {
-      ...structuredClone(defaultData),
-      ...parsed,
-      people: {
-        me: { ...defaultData.people.me, ...(parsedPeople.me || {}) },
-        wife: { ...defaultData.people.wife, ...(parsedPeople.wife || {}) },
-      },
-      entries: parsed?.entries || [],
-      adjustments: parsed?.adjustments || [],
-    }
   }
 
   const updateAdjustment = (person, field, value)=>{
@@ -227,7 +214,31 @@ export default function Summary({ data, setData, year }){
               <div className="text-xs text-slate-300">Carry: {balances.wife.carry.toFixed(1)} days • Purchased: {balances.wife.purchased.toFixed(1)} days</div>
               <div className="text-xs text-amber-200">Must use: {balances.wife.mustUse?.toFixed(1) ?? '0.0'} days</div>
               <div className="text-xs text-slate-400">
-                Wife is kept as a yearly balance view, not a fortnightly accrual schedule.
+                Wife is shown as a descending balance ledger by entry.
+              </div>
+
+              {wifeLedgerDescending.length === 0 ? (
+                <div className="text-sm text-slate-400">No leave entries were found in this balance year.</div>
+              ) : (
+                <ul className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {wifeLedgerDescending.map(entry => (
+                    <li key={entry.id} className="rounded-md border border-white/10 bg-slate-950/20 px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="text-white font-medium">{formatDate(entry.start)} → {formatDate(entry.end)}</span>
+                        <span className="text-slate-300">{entry.remainingHours.toFixed(1)} hours left</span>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400 flex flex-wrap gap-3">
+                        <span>{entry.days.toFixed(1)} days</span>
+                        <span>-{entry.hours.toFixed(1)}h drawdown</span>
+                        {entry.note ? <span>{entry.note}</span> : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="text-xs text-slate-400">
+                Closing balance: {wifeLedger.closingHours.toFixed(1)} hours
               </div>
             </div>
           </div>

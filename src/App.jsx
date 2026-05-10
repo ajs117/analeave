@@ -1,14 +1,72 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import LeaveForm from './components/LeaveForm'
 import Summary from './components/Summary'
 import YearCalendar from './components/YearCalendar'
-import { loadData, saveData } from './utils/leaveService'
+import { loadData, normalizeData, readDataFromFile, saveDataToFileHandle } from './utils/leaveService'
 
 export default function App(){
   const [data, setData] = useState(() => loadData())
   const [year, setYear] = useState(() => new Date().getFullYear())
+  const fileHandleRef = useRef(null)
+  const openFileInputRef = useRef(null)
+  const [fileName, setFileName] = useState('No file selected')
 
-  useEffect(()=>{ saveData(data) }, [data])
+  useEffect(()=>{
+    if(!fileHandleRef.current) return
+    void saveDataToFileHandle(data, fileHandleRef.current)
+  }, [data])
+
+  const openDataFile = async ()=>{
+    if(typeof window !== 'undefined' && 'showOpenFilePicker' in window){
+      try{
+        const [handle] = await window.showOpenFilePicker({
+          multiple: false,
+          types: [{ description: 'Leave data', accept: { 'application/json': ['.json'] } }],
+        })
+        const nextData = await readDataFromFile(await handle.getFile())
+        fileHandleRef.current = handle
+        setFileName(handle.name)
+        setData(nextData)
+      }catch(_error){}
+      return
+    }
+    openFileInputRef.current?.click()
+  }
+
+  const importFromInput = async (ev)=>{
+    const file = ev.target.files?.[0]
+    if(!file) return
+    try{
+      const nextData = await readDataFromFile(file)
+      fileHandleRef.current = null
+      setFileName(file.name)
+      setData(nextData)
+    }catch(_error){}
+    ev.target.value = ''
+  }
+
+  const saveDataAs = async ()=>{
+    if(typeof window !== 'undefined' && 'showSaveFilePicker' in window){
+      try{
+        const handle = await window.showSaveFilePicker({
+          suggestedName: fileName && fileName !== 'No file selected' ? fileName : 'leave-data.json',
+          types: [{ description: 'Leave data', accept: { 'application/json': ['.json'] } }],
+        })
+        fileHandleRef.current = handle
+        setFileName(handle.name)
+        await saveDataToFileHandle(data, handle)
+      }catch(_error){}
+      return
+    }
+
+    const blob = new Blob([JSON.stringify(normalizeData(data), null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName && fileName !== 'No file selected' ? fileName : 'leave-data.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const yearsAvailable = useMemo(()=>{
     const preset = [2025,2026,2027,2028]
@@ -39,6 +97,8 @@ export default function App(){
             <select className="input w-32" value={year} onChange={e=>setYear(parseInt(e.target.value,10))}>
               {yearsAvailable.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
+            <button className="btn-secondary" type="button" onClick={openDataFile}>Open file</button>
+            <button className="btn-secondary" type="button" onClick={saveDataAs}>Save file</button>
           </div>
         </header>
 
@@ -53,8 +113,9 @@ export default function App(){
         </div>
 
         <footer className="text-slate-400 text-sm">
-          Data stays in your browser (localStorage). Export/Import in Summary to back up.
+          Data is saved to the file you open or save. If your browser does not support file access, use Import/Export in Summary.
         </footer>
+        <input ref={openFileInputRef} className="hidden" type="file" accept="application/json,.json" onChange={importFromInput} />
       </div>
     </div>
   )

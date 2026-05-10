@@ -63,7 +63,7 @@ export default function LeaveForm({ data, setData, setYear }){
         </select>
       </label>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
         <label className="text-sm text-slate-200">Start
           <input className="input mt-1" type="date" value={start} onChange={e=>setStart(e.target.value)} />
         </label>

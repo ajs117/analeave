@@ -12,28 +12,34 @@ export const defaultData = {
   adjustments: [] // per person per leave-year: carryOver, purchased, earned
 }
 
-export function loadData(){
-  try{
-    const raw = localStorage.getItem('ana-leave')
-    if(!raw) return structuredClone(defaultData)
-    const parsed = JSON.parse(raw)
-    const parsedPeople = parsed.people || {}
-    return {
-      ...defaultData,
-      ...parsed,
-      people: {
-        me: { ...defaultData.people.me, ...(parsedPeople.me || {}) },
-        wife: { ...defaultData.people.wife, ...(parsedPeople.wife || {}) },
-      },
-      entries: parsed.entries || [],
-      adjustments: parsed.adjustments || []
-    }
-  }catch(e){
-    return structuredClone(defaultData)
+export function normalizeData(parsed){
+  const parsedPeople = parsed?.people || {}
+  return {
+    ...structuredClone(defaultData),
+    ...parsed,
+    people: {
+      me: { ...defaultData.people.me, ...(parsedPeople.me || {}) },
+      wife: { ...defaultData.people.wife, ...(parsedPeople.wife || {}) },
+    },
+    entries: parsed?.entries || [],
+    adjustments: parsed?.adjustments || []
   }
 }
 
-export function saveData(data){ localStorage.setItem('ana-leave', JSON.stringify(data)) }
+export function loadData(){
+  return structuredClone(defaultData)
+}
+
+export async function readDataFromFile(file){
+  const text = await file.text()
+  return normalizeData(JSON.parse(text))
+}
+
+export async function saveDataToFileHandle(data, handle){
+  const writable = await handle.createWritable()
+  await writable.write(JSON.stringify(data, null, 2))
+  await writable.close()
+}
 
 export function addLeaveEntry(person, start, end, note=''){
   return { id: id(), person, start, end, note }
