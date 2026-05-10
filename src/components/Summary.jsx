@@ -5,6 +5,17 @@ export default function Summary({ data, setData, year }){
   const balances = computeBalances(data, year)
   const fortnightly = useMemo(() => computeFortnightlyBalanceTimeline(data, 'me', year), [data, year])
   const [showDrawdown, setShowDrawdown] = useState(false)
+  const sortedEntries = useMemo(() => {
+    return [...data.entries].sort((left, right) => {
+      const leftStart = new Date(left.start).getTime()
+      const rightStart = new Date(right.start).getTime()
+      if (leftStart !== rightStart) return leftStart - rightStart
+      const leftEnd = new Date(left.end).getTime()
+      const rightEnd = new Date(right.end).getTime()
+      if (leftEnd !== rightEnd) return leftEnd - rightEnd
+      return String(left.person).localeCompare(String(right.person))
+    })
+  }, [data.entries])
 
   const remove = (id)=>{
     setData(prev => ({...prev, entries: prev.entries.filter(e=>e.id!==id)}))
@@ -139,10 +150,10 @@ export default function Summary({ data, setData, year }){
       </div>
 
       <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
-        {data.entries.length === 0 && (
+        {sortedEntries.length === 0 && (
           <li className="text-slate-400 text-sm">No leave added yet.</li>
         )}
-        {data.entries.map(e=> (
+        {sortedEntries.map(e=> (
           <li key={e.id} className="flex items-center justify-between bg-white/5 border border-white/10 rounded-lg px-3 py-2">
             <div>
               <div className="text-sm text-white font-semibold flex items-center gap-2">
