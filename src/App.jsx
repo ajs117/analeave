@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import LeaveForm from './components/LeaveForm'
 import Summary from './components/Summary'
 import YearCalendar from './components/YearCalendar'
-import { clearLinkedFileHandle, getLinkedFilePermission, loadData, loadLinkedFileHandle, readDataFromFile, saveDataToFileHandle, saveLinkedFileHandle, supportsLinkedFiles } from './utils/leaveService'
+import { clearLinkedFileHandle, getLinkedFilePermission, loadData, loadLinkedFileHandle, parseLocalISO, readDataFromFile, saveDataToFileHandle, saveLinkedFileHandle, supportsLinkedFiles } from './utils/leaveService'
 
 export default function App(){
   const [data, setData] = useState(() => loadData())
@@ -89,8 +89,10 @@ export default function App(){
       }
     }
 
-    void persist()
-    return ()=>{ cancelled = true }
+    // Debounce so rapid edits (e.g. typing in the adjustment inputs) collapse
+    // into a single write instead of rewriting the whole file per keystroke.
+    const timer = setTimeout(()=>{ void persist() }, 500)
+    return ()=>{ cancelled = true; clearTimeout(timer) }
   }, [data, startupReady])
 
   const linkFileHandle = async (handle, { loadContents } = { loadContents: true })=>{
@@ -153,8 +155,8 @@ export default function App(){
     const preset = [2025,2026,2027,2028]
     const yrs = new Set(preset)
     data.entries.forEach(e=>{
-      yrs.add(new Date(e.start).getFullYear())
-      yrs.add(new Date(e.end).getFullYear())
+      yrs.add(parseLocalISO(e.start).getFullYear())
+      yrs.add(parseLocalISO(e.end).getFullYear())
     })
     return Array.from(yrs).sort()
   }, [data.entries])

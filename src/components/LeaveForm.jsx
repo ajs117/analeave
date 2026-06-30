@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { countWorkingDays, getHolidaysForRange, addLeaveEntry } from '../utils/leaveService'
+import { countWorkingDays, getHolidaysForRange, addLeaveEntry, parseLocalISO } from '../utils/leaveService'
 
 export default function LeaveForm({ data, setData, setYear }){
   const [person, setPerson] = useState('both')
@@ -7,29 +7,19 @@ export default function LeaveForm({ data, setData, setYear }){
   const [end, setEnd] = useState('')
   const [note, setNote] = useState('')
 
-  const holidayPreview = useMemo(()=>{
-    if(!start || !end) return {days:0, holidays:[]}
-    if(person === 'both'){
-      const h1 = getHolidaysForRange(start, end, data.people.me.region)
-      const h2 = getHolidaysForRange(start, end, data.people.wife.region)
-      const merged = Array.from(new Set([...h1, ...h2]))
-      // Only UK bank holidays should reduce leave totals; HK is reference only
-      const ukOnly = getHolidaysForRange(start, end, 'UK')
-      const days = countWorkingDays(start, end, ukOnly)
-      return { days, holidays: merged }
-    }
-    const holidays = getHolidaysForRange(start, end, data.people[person].region)
-    const ukOnly = getHolidaysForRange(start, end, 'UK')
-    const days = countWorkingDays(start, end, ukOnly)
-    return { days, holidays }
-  }, [start,end,person,data.people])
+  // Only UK bank holidays reduce leave totals (HK is reference-only on the calendar),
+  // so the working-day preview is the same regardless of who the leave is for.
+  const workingDays = useMemo(()=>{
+    if(!start || !end) return 0
+    return countWorkingDays(start, end, getHolidaysForRange(start, end, 'UK'))
+  }, [start,end])
 
   useEffect(()=>{
     if(!start) return
     // auto-set end if empty or before start
-    if(!end || new Date(end) < new Date(start)) setEnd(start)
+    if(!end || parseLocalISO(end) < parseLocalISO(start)) setEnd(start)
     // switch main calendar year to the start date's year to aid selection
-    if(typeof setYear === 'function') setYear(new Date(start).getFullYear())
+    if(typeof setYear === 'function') setYear(parseLocalISO(start).getFullYear())
   }, [start])
 
   const submit = (e)=>{
@@ -77,7 +67,7 @@ export default function LeaveForm({ data, setData, setYear }){
       </label>
 
       <div className="flex items-center justify-between text-sm text-slate-200">
-        <span>Working days: <strong>{holidayPreview.days}</strong></span>
+        <span>Working days: <strong>{workingDays}</strong></span>
         <span className="text-slate-400">Excludes weekends and bank holidays</span>
       </div>
 

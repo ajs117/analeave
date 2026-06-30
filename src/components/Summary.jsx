@@ -2,9 +2,9 @@ import React, { useMemo, useState } from 'react'
 import { computeBalances, formatDate, getAdjustmentRecord, upsertAdjustment, getEntryWorkingDays, computeFortnightlyBalanceTimeline, computeDrawdownTimeline } from '../utils/leaveService'
 
 export default function Summary({ data, setData, year }){
-  const balances = computeBalances(data, year)
-  const fortnightly = useMemo(() => computeFortnightlyBalanceTimeline(data, 'me', year), [data, year])
-  const wifeDrawdown = useMemo(() => computeDrawdownTimeline(data, year), [data, year])
+  const balances = useMemo(() => computeBalances(data, year), [data, year])
+  const fortnightly = useMemo(() => computeFortnightlyBalanceTimeline(data, 'me', year, balances), [data, year, balances])
+  const wifeDrawdown = useMemo(() => computeDrawdownTimeline(data, year, balances), [data, year, balances])
   const wifeLedgerDescending = useMemo(() => [...(wifeDrawdown.wife?.intervals || [])].reverse(), [wifeDrawdown])
   const [showDrawdown, setShowDrawdown] = useState(false)
   const sortedEntries = useMemo(() => {
@@ -21,27 +21,6 @@ export default function Summary({ data, setData, year }){
 
   const remove = (id)=>{
     setData(prev => ({...prev, entries: prev.entries.filter(e=>e.id!==id)}))
-  }
-
-  const exportJSON = ()=>{
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'})
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href=url; a.download='leave-data.json'; a.click()
-  }
-
-  const importJSON = (ev)=>{
-    const f = ev.target.files[0]
-    if(!f) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(reader.result)
-        setData(normalizeData(parsed))
-      } catch (_error) {
-        // Keep the current data if the import is invalid.
-      }
-    }
-    reader.readAsText(f)
   }
 
   const updateAdjustment = (person, field, value)=>{

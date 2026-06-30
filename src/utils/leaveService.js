@@ -114,7 +114,7 @@ export function addLeaveEntry(person, start, end, note=''){
 }
 
 export function formatDate(d){
-  try{ return new Date(d).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) }
+  try{ return parseLocalISO(d).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) }
   catch(_){ return d }
 }
 
@@ -123,6 +123,15 @@ function dateToLocalISO(date){
   const m = String(date.getMonth()+1).padStart(2,'0')
   const d = String(date.getDate()).padStart(2,'0')
   return `${y}-${m}-${d}`
+}
+
+// Parse a YYYY-MM-DD string as a *local* date so day-of-week and ISO keys stay
+// consistent. (new Date('2025-06-15') parses as UTC midnight, which drifts a day
+// in timezones west of UTC.)
+export function parseLocalISO(value){
+  if(value instanceof Date) return value
+  const [y, m, d] = String(value).split('-').map(Number)
+  return new Date(y, (m || 1) - 1, d || 1)
 }
 
 export function getYearWindow(startMonth, today = new Date()){
@@ -158,27 +167,36 @@ export function upsertAdjustment(data, record){
 }
 
 export function countWorkingDays(startISO, endISO, holidays=[]){
-  const s = new Date(startISO), e = new Date(endISO)
+  const set = holidays instanceof Set ? holidays : new Set(holidays)
+  const s = parseLocalISO(startISO), e = parseLocalISO(endISO)
   let days = 0
   for(let d = new Date(s); d <= e; d.setDate(d.getDate()+1)){
     const dow = d.getDay()
-    const iso = d.toISOString().slice(0,10)
     if(dow===0 || dow===6) continue
-    if(holidays.includes(iso)) continue
+    if(set.has(dateToLocalISO(d))) continue
     days++
   }
   return days
 }
 
-export function getHolidaysForRange(start, end, region){
-  const s = new Date(start).getFullYear()
-  const e = new Date(end).getFullYear()
-  const set = new Set()
-  for(let y=s; y<=e; y++){
-    const list = getHolidays(y, region)
-    list.forEach(d=>set.add(d))
+// Holiday lists are static per (year, region), so cache the assembled set for a
+// year range rather than rebuilding it on every working-day calculation.
+const holidaySetCache = new Map()
+function holidaySetForRange(start, end, region='UK'){
+  const s = parseLocalISO(start).getFullYear()
+  const e = parseLocalISO(end).getFullYear()
+  const key = `${region}:${s}:${e}`
+  let set = holidaySetCache.get(key)
+  if(!set){
+    set = new Set()
+    for(let y=s; y<=e; y++) getHolidays(y, region).forEach(d=>set.add(d))
+    holidaySetCache.set(key, set)
   }
-  return Array.from(set)
+  return set
+}
+
+export function getHolidaysForRange(start, end, region){
+  return Array.from(holidaySetForRange(start, end, region))
 }
 
 export function getEntryWorkingDays(entry){
@@ -186,8 +204,7 @@ export function getEntryWorkingDays(entry){
 }
 
 export function workingDaysInRange(startISO, endISO){
-  const holidays = getHolidaysForRange(startISO, endISO, 'UK')
-  return countWorkingDays(startISO, endISO, holidays)
+  return countWorkingDays(startISO, endISO, holidaySetForRange(startISO, endISO, 'UK'))
 }
 
 export function computeBalances(data, viewYear = new Date().getFullYear()){
@@ -199,10 +216,10 @@ export function computeBalances(data, viewYear = new Date().getFullYear()){
     const yearStartYear = yearStart.getFullYear()
 
     const used = data.entries
-      .filter(e=> e.person===k && !(new Date(e.end) < yearStart || new Date(e.start) > yearEnd))
+      .filter(e=> e.person===k && !(parseLocalISO(e.end) < yearStart || parseLocalISO(e.start) > yearEnd))
       .reduce((s,e)=>{
-        const sDate = new Date(e.start) < yearStart ? dateToLocalISO(yearStart) : e.start
-        const eDate = new Date(e.end) > yearEnd ? dateToLocalISO(yearEnd) : e.end
+        const sDate = parseLocalISO(e.start) < yearStart ? dateToLocalISO(yearStart) : e.start
+        const eDate = parseLocalISO(e.end) > yearEnd ? dateToLocalISO(yearEnd) : e.end
         return s + workingDaysInRange(sDate, eDate)
       }, 0)
     const adj = getAdjustmentRecord(data, k, yearStartYear)
@@ -216,10 +233,10 @@ export function computeBalances(data, viewYear = new Date().getFullYear()){
     const prevYearNum = prevStart.getFullYear()
 
     const prevUsed = data.entries
-      .filter(e=> e.person===k && !(new Date(e.end) < prevStart || new Date(e.start) > prevEnd))
+      .filter(e=> e.person===k && !(parseLocalISO(e.end) < prevStart || parseLocalISO(e.start) > prevEnd))
       .reduce((s,e)=>{
-        const sDate = new Date(e.start) < prevStart ? dateToLocalISO(prevStart) : e.start
-        const eDate = new Date(e.end) > prevEnd ? dateToLocalISO(prevEnd) : e.end
+        const sDate = parseLocalISO(e.start) < prevStart ? dateToLocalISO(prevStart) : e.start
+        const eDate = parseLocalISO(e.end) > prevEnd ? dateToLocalISO(prevEnd) : e.end
         return s + workingDaysInRange(sDate, eDate)
       }, 0)
 
@@ -269,22 +286,21 @@ export function computeBalances(data, viewYear = new Date().getFullYear()){
   return res
 }
 
-export function computeDrawdownTimeline(data, viewYear = new Date().getFullYear()){
-  const balances = computeBalances(data, viewYear)
+export function computeDrawdownTimeline(data, viewYear = new Date().getFullYear(), balances = computeBalances(data, viewYear)){
   const result = {}
 
   Object.keys(data.people).forEach(person => {
     const balance = balances[person]
     const personData = data.people[person]
     const hoursPerDay = Number(personData.hoursPerDay) || 8
-    const start = new Date(balance.yearStart)
-    const end = new Date(balance.yearEnd)
+    const start = parseLocalISO(balance.yearStart)
+    const end = parseLocalISO(balance.yearEnd)
 
     const relevantEntries = (data.entries || [])
-      .filter(entry => entry.person === person && !(new Date(entry.end) < start || new Date(entry.start) > end))
+      .filter(entry => entry.person === person && !(parseLocalISO(entry.end) < start || parseLocalISO(entry.start) > end))
       .map(entry => {
-        const clippedStart = new Date(entry.start) < start ? dateToLocalISO(start) : entry.start
-        const clippedEnd = new Date(entry.end) > end ? dateToLocalISO(end) : entry.end
+        const clippedStart = parseLocalISO(entry.start) < start ? dateToLocalISO(start) : entry.start
+        const clippedEnd = parseLocalISO(entry.end) > end ? dateToLocalISO(end) : entry.end
         const days = workingDaysInRange(clippedStart, clippedEnd)
         return {
           id: entry.id,
@@ -322,26 +338,25 @@ export function computeDrawdownTimeline(data, viewYear = new Date().getFullYear(
   return result
 }
 
-export function computeFortnightlyBalanceTimeline(data, person = 'me', viewYear = new Date().getFullYear()){
-  const balances = computeBalances(data, viewYear)
+export function computeFortnightlyBalanceTimeline(data, person = 'me', viewYear = new Date().getFullYear(), balances = computeBalances(data, viewYear)){
   const balance = balances[person]
   const personData = data.people[person]
   if(!balance || !personData) return { person, periods: [], openingHours: 0, accrualHoursPerPeriod: 0, closingHours: 0 }
 
   const hoursPerDay = Number(personData.hoursPerDay) || 8
-  const start = new Date(balance.yearStart)
-  const end = new Date(balance.yearEnd)
+  const start = parseLocalISO(balance.yearStart)
+  const end = parseLocalISO(balance.yearEnd)
   const carryOverHours = (balance.carry || 0) * hoursPerDay
   const accrualHoursPerPeriod = ((Number(personData.entitlement) || 0) / 26) * hoursPerDay
   const periodLengthDays = 14
   const periodCount = 26
 
   const leaveEntries = (data.entries || [])
-    .filter(entry => entry.person === person && !(new Date(entry.end) < start || new Date(entry.start) > end))
+    .filter(entry => entry.person === person && !(parseLocalISO(entry.end) < start || parseLocalISO(entry.start) > end))
     .map(entry => ({
       ...entry,
-      clippedStart: new Date(entry.start) < start ? dateToLocalISO(start) : entry.start,
-      clippedEnd: new Date(entry.end) > end ? dateToLocalISO(end) : entry.end,
+      clippedStart: parseLocalISO(entry.start) < start ? dateToLocalISO(start) : entry.start,
+      clippedEnd: parseLocalISO(entry.end) > end ? dateToLocalISO(end) : entry.end,
     }))
 
   const periods = []
@@ -353,16 +368,18 @@ export function computeFortnightlyBalanceTimeline(data, person = 'me', viewYear 
     const periodEnd = new Date(periodStart)
     periodEnd.setDate(periodEnd.getDate() + (periodLengthDays - 1))
     if(periodStart > end) break
-    if(periodEnd > end) periodEnd.setTime(end.getTime())
+    // Clamp to the leave year, and let the final period absorb the 1-2 day tail
+    // that 26 x 14 days leaves uncovered so end-of-year leave is still counted.
+    if(periodEnd > end || index === periodCount - 1) periodEnd.setTime(end.getTime())
 
     const periodStartIso = dateToLocalISO(periodStart)
     const periodEndIso = dateToLocalISO(periodEnd)
 
     const usedDays = leaveEntries
-      .filter(entry => !(new Date(entry.clippedEnd) < periodStart || new Date(entry.clippedStart) > periodEnd))
+      .filter(entry => !(parseLocalISO(entry.clippedEnd) < periodStart || parseLocalISO(entry.clippedStart) > periodEnd))
       .reduce((sum, entry) => {
-        const overlapStart = new Date(entry.clippedStart) < periodStart ? periodStartIso : entry.clippedStart
-        const overlapEnd = new Date(entry.clippedEnd) > periodEnd ? periodEndIso : entry.clippedEnd
+        const overlapStart = parseLocalISO(entry.clippedStart) < periodStart ? periodStartIso : entry.clippedStart
+        const overlapEnd = parseLocalISO(entry.clippedEnd) > periodEnd ? periodEndIso : entry.clippedEnd
         return sum + workingDaysInRange(overlapStart, overlapEnd)
       }, 0)
 

@@ -57,6 +57,9 @@ async function main() {
 
     copyRecursive(buildDir, tmp)
 
+    // Stop GitHub Pages' Jekyll processing so files/dirs are served verbatim.
+    fs.writeFileSync(path.join(tmp, '.nojekyll'), '')
+
     run('git add -A')
     try {
       run('git commit -m "Deploy to gh-pages [skip ci]"')

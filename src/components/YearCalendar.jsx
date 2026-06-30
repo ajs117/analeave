@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
 import { getHolidays } from '../data/holidays'
+import { parseLocalISO } from '../utils/leaveService'
 
 const PERSON_COLORS = {
   me: 'bg-blue-500/80 border-blue-300/60',
@@ -19,8 +20,8 @@ function expandEntriesByDay(entries, year){
   const yearEnd = new Date(year, 11, 31)
 
   entries.forEach(e => {
-    const start = new Date(e.start)
-    const end = new Date(e.end)
+    const start = parseLocalISO(e.start)
+    const end = parseLocalISO(e.end)
     if(end < yearStart || start > yearEnd) return
 
     const s = start < yearStart ? new Date(yearStart) : new Date(start)
