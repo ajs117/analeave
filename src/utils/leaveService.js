@@ -1,4 +1,4 @@
-import { getHolidays } from '../data/holidays'
+import { getHolidays } from '../data/holidays.js'
 
 // Simple id generator
 const id = ()=> Date.now().toString(36) + Math.random().toString(36).slice(2,8)
@@ -26,87 +26,23 @@ export function normalizeData(parsed){
   }
 }
 
+const CACHE_KEY = 'ana-leave'
+
 export function loadData(){
+  try{
+    const cached = localStorage.getItem(CACHE_KEY)
+    if(cached) return normalizeData(JSON.parse(cached))
+  }catch(_error){}
   return structuredClone(defaultData)
 }
 
-const FILE_DB_NAME = 'ana-leave'
-const FILE_STORE_NAME = 'linked-files'
-const ACTIVE_FILE_KEY = 'active-data-file'
-
-function openFileDb(){
-  return new Promise((resolve, reject) => {
-    if(typeof indexedDB === 'undefined'){
-      reject(new Error('IndexedDB is not available'))
-      return
-    }
-
-    const request = indexedDB.open(FILE_DB_NAME, 1)
-    request.onupgradeneeded = () => {
-      if(!request.result.objectStoreNames.contains(FILE_STORE_NAME)){
-        request.result.createObjectStore(FILE_STORE_NAME)
-      }
-    }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error || new Error('Failed to open IndexedDB'))
-  })
-}
-
-function withFileStore(mode, action){
-  return openFileDb().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(FILE_STORE_NAME, mode)
-    const store = tx.objectStore(FILE_STORE_NAME)
-    const request = action(store)
-
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error || new Error('IndexedDB request failed'))
-    tx.oncomplete = () => db.close()
-    tx.onabort = () => {
-      db.close()
-      reject(tx.error || new Error('IndexedDB transaction aborted'))
-    }
-  }))
-}
-
-export function supportsLinkedFiles(){
-  return typeof window !== 'undefined'
-    && 'showOpenFilePicker' in window
-    && 'showSaveFilePicker' in window
-    && typeof indexedDB !== 'undefined'
-}
-
-export function loadLinkedFileHandle(){
-  return withFileStore('readonly', store => store.get(ACTIVE_FILE_KEY))
-}
-
-export function saveLinkedFileHandle(handle){
-  return withFileStore('readwrite', store => store.put(handle, ACTIVE_FILE_KEY))
-}
-
-export function clearLinkedFileHandle(){
-  return withFileStore('readwrite', store => store.delete(ACTIVE_FILE_KEY))
-}
-
-export async function getLinkedFilePermission(handle, { request = false, write = true } = {}){
-  if(!handle) return 'denied'
-  const options = write ? { mode: 'readwrite' } : {}
-  if(typeof handle.queryPermission === 'function'){
-    const permission = await handle.queryPermission(options)
-    if(permission === 'granted' || !request || typeof handle.requestPermission !== 'function') return permission
-    return handle.requestPermission(options)
-  }
-  return 'granted'
+export function cacheData(data){
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify(data)) }catch(_error){}
 }
 
 export async function readDataFromFile(file){
   const text = await file.text()
   return normalizeData(JSON.parse(text))
-}
-
-export async function saveDataToFileHandle(data, handle){
-  const writable = await handle.createWritable()
-  await writable.write(JSON.stringify(data, null, 2))
-  await writable.close()
 }
 
 export function addLeaveEntry(person, start, end, note=''){
@@ -118,7 +54,7 @@ export function formatDate(d){
   catch(_){ return d }
 }
 
-function dateToLocalISO(date){
+export function dateToLocalISO(date){
   const y = date.getFullYear()
   const m = String(date.getMonth()+1).padStart(2,'0')
   const d = String(date.getDate()).padStart(2,'0')
@@ -141,6 +77,12 @@ export function getYearWindow(startMonth, today = new Date()){
   yearEnd.setFullYear(yearEnd.getFullYear()+1)
   yearEnd.setDate(yearEnd.getDate()-1)
   return { yearStart, yearEnd }
+}
+
+// The calendar-year key computeBalances uses for the leave year containing `today`.
+export function currentViewYear(startMonth, today = new Date()){
+  const { yearStart } = getYearWindow(startMonth, today)
+  return startMonth === 1 ? yearStart.getFullYear() : yearStart.getFullYear() + 1
 }
 
 export function getYearWindowForView(startMonth, viewYear){

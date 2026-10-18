@@ -1,0 +1,116 @@
+import React, { useRef, useState } from 'react'
+import { readDataFromFile } from '../utils/leaveService'
+
+const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new'
+
+export default function SyncPanel({ sync, onClose }){
+  const { config, data, editData, connect, createNew, disconnect, syncNow, status, agentUrl } = sync
+  const [gistId, setGistId] = useState(config?.gistId || '')
+  const [token, setToken] = useState(config?.token || '')
+  const fileRef = useRef(null)
+  const [copied, setCopied] = useState('')
+
+  const copy = async (label, text)=>{
+    try{
+      await navigator.clipboard.writeText(text)
+      setCopied(label)
+      setTimeout(()=>setCopied(''), 2000)
+    }catch(_error){
+      prompt('Copy this:', text)
+    }
+  }
+
+  const agentPrompt = ()=>`Fetch my annual leave data from ${agentUrl} (JSON; read its "about" and "rules" fields first). Today is ${new Date().toISOString().slice(0, 10)}. Use it to advise me on planning our annual leave.`
+  const connected = Boolean(config?.gistId)
+
+  const exportJson = ()=>{
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'leave-data.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const importJson = async (ev)=>{
+    const file = ev.target.files?.[0]
+    ev.target.value = ''
+    if(!file) return
+    try{
+      const next = await readDataFromFile(file)
+      if(confirm(`Replace current data with ${next.entries.length} entries from ${file.name}?`)) editData(() => next)
+    }catch(error){
+      alert(`Could not read ${file.name}: ${error.message}`)
+    }
+  }
+
+  return (
+    <div className="glass-card space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="pill bg-violet-500/20 text-violet-100">Sync</span>
+          <h2 className="section-title">GitHub Gist storage</h2>
+        </div>
+        <button type="button" className="text-slate-300 text-sm" onClick={onClose}>Close</button>
+      </div>
+
+      <p className="text-sm text-slate-300">
+        Data is saved to a secret gist so every device shares one copy, and a ready-computed summary is published for AI agents.
+        Create a <a className="underline" href={TOKEN_URL} target="_blank" rel="noreferrer">fine-grained token</a> with
+        account permission <strong>Gists: Read and write</strong> and no repository access. Paste the same token and gist ID on each device.
+      </p>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="block text-sm text-slate-200">Gist ID
+          <input className="input mt-1 font-mono" value={gistId} onChange={e=>setGistId(e.target.value)}
+            placeholder="leave blank to create one" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+        </label>
+        <label className="block text-sm text-slate-200">GitHub token
+          <input className="input mt-1 font-mono" type="password" value={token} onChange={e=>setToken(e.target.value)}
+            placeholder="github_pat_…" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+        </label>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn-primary" disabled={!gistId.trim()}
+          onClick={()=>connect({ gistId: gistId.replace(/^.*\//, ''), token })}>
+          {connected ? 'Update' : 'Connect'}
+        </button>
+        <button type="button" className="btn-secondary" disabled={!token.trim() || Boolean(gistId.trim())}
+          onClick={()=>createNew(token)}
+          title="Creates a new secret gist containing the data currently on this device">
+          Create new gist
+        </button>
+        {connected && <button type="button" className="btn-secondary" onClick={()=>syncNow()}>Sync now</button>}
+        {connected && <button type="button" className="btn-secondary" onClick={()=>{ if(confirm('Stop syncing on this device? Data stays here.')){ disconnect(); setGistId(''); setToken('') } }}>Disconnect</button>}
+      </div>
+
+      {connected && (
+        <div className="text-xs text-slate-400 break-all">
+          Gist: <a className="underline" href={`https://gist.github.com/${config.gistId}`} target="_blank" rel="noreferrer">{config.gistId}</a>
+          {' · '}{status.message}
+        </div>
+      )}
+
+      {agentUrl && (
+        <div className="border-t border-white/10 pt-3 space-y-2">
+          <div className="text-sm text-slate-200">Agent endpoint <span className="text-slate-400">· paste into any AI agent that can fetch URLs</span></div>
+          <div className="text-xs font-mono text-slate-300 break-all bg-white/5 rounded-lg px-3 py-2">{agentUrl}</div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn-secondary" onClick={()=>copy('url', agentUrl)}>{copied === 'url' ? 'Copied' : 'Copy URL'}</button>
+            <button type="button" className="btn-secondary" onClick={()=>copy('prompt', agentPrompt())}>{copied === 'prompt' ? 'Copied' : 'Copy prompt for agent'}</button>
+            <a className="btn-secondary" href={agentUrl} target="_blank" rel="noreferrer">Open</a>
+          </div>
+        </div>
+      )}
+
+      <div className="border-t border-white/10 pt-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-slate-400 mr-auto">Backup</span>
+        <button type="button" className="btn-secondary" onClick={exportJson}>Export JSON</button>
+        <button type="button" className="btn-secondary" onClick={()=>fileRef.current?.click()}>Import JSON</button>
+        <input ref={fileRef} className="hidden" type="file" accept="application/json,.json" onChange={importJson} />
+      </div>
+    </div>
+  )
+}

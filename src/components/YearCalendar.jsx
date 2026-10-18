@@ -47,7 +47,7 @@ function buildHolidaySet(year){
 
 const dayNames = ['Mo','Tu','We','Th','Fr','Sa','Su']
 
-export default function YearCalendar({ data, year }){
+export default function YearCalendar({ data, year, selection, onPickDay }){
   const leaveByDay = useMemo(()=> expandEntriesByDay(data.entries, year), [data.entries, year])
   const holidays = useMemo(()=> buildHolidaySet(year), [year])
 
@@ -67,14 +67,14 @@ export default function YearCalendar({ data, year }){
 
       <div className="grid md:grid-cols-3 gap-4">
         {months.map(m => (
-          <MonthGrid key={m.getMonth()} monthDate={m} leaveByDay={leaveByDay} holidays={holidays} />
+          <MonthGrid key={m.getMonth()} monthDate={m} leaveByDay={leaveByDay} holidays={holidays} selection={selection} onPickDay={onPickDay} />
         ))}
       </div>
     </div>
   )
 }
 
-function MonthGrid({ monthDate, leaveByDay, holidays }){
+function MonthGrid({ monthDate, leaveByDay, holidays, selection, onPickDay }){
   const month = monthDate.getMonth()
   const year = monthDate.getFullYear()
   const monthName = monthDate.toLocaleString('en', { month: 'long' })
@@ -103,11 +103,16 @@ function MonthGrid({ monthDate, leaveByDay, holidays }){
           const isBoth = isUK && isHK
           const isWeekend = isWeekendDay(year, month, d)
 
-          let className = 'h-14 rounded-lg border text-center flex flex-col items-center justify-start pt-1 transition '
-          className += isWeekend ? 'border-white/5 text-slate-500 bg-white/5 ' : 'border-white/10 bg-white/5 '
+          const isSelected = selection?.start && iso >= selection.start && iso <= (selection.end || selection.start)
+
+          let className = 'h-14 rounded-lg border text-center flex flex-col items-center justify-start pt-1 transition touch-manipulation '
+          if(isSelected) className += 'ring-2 ring-sky-400 border-sky-300/40 bg-sky-500/25 '
+          else className += isWeekend ? 'border-white/5 text-slate-500 bg-white/5 ' : 'border-white/10 bg-white/5 '
 
           return (
-            <div key={iso} className={className} title={tooltip(iso, people, isUK, isHK, isBoth)}>
+            <button type="button" key={iso} className={className} title={tooltip(iso, people, isUK, isHK, isBoth)}
+              aria-label={tooltip(iso, people, isUK, isHK, isBoth)} aria-pressed={Boolean(isSelected)}
+              onClick={()=>onPickDay?.(iso)}>
               <span className="text-xs font-semibold">{d}</span>
 
               <div className="flex flex-col items-center gap-1 w-full mt-1">
@@ -122,7 +127,7 @@ function MonthGrid({ monthDate, leaveByDay, holidays }){
                   ))}
                 </div>
               )}
-            </div>
+            </button>
           )
         })}
       </div>

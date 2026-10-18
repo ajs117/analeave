@@ -6,6 +6,7 @@ body {
 	@apply bg-slate-900 text-slate-100 font-sans;
 }
 
+@layer components {
 .glass-card {
 	@apply bg-white/5 border border-white/10 rounded-xl shadow-lg backdrop-blur px-6 py-5;
 }
@@ -36,8 +37,19 @@ input[type="date"]::-webkit-datetime-edit, input[type="date"]::-webkit-datetime-
 .section-title {
 	@apply text-lg font-semibold text-white flex items-center gap-2;
 }
+}
 
 .holiday-bar-uk{ width: 70%; height: 4px; border-radius: 9999px; background-color: #34d399; }
 .holiday-bar-hk{ width: 70%; height: 4px; border-radius: 9999px; background-color: #fbbf24; }
 .leave-bar-me{ width: 70%; height: 4px; border-radius: 9999px; background-color: #3b82f6; }
 .leave-bar-wife{ width: 70%; height: 4px; border-radius: 9999px; background-color: #fb923c; }
+
+.pt-safe{ padding-top: max(2.5rem, env(safe-area-inset-top)); }
+.pb-safe{ padding-bottom: env(safe-area-inset-bottom); }
+
+button:disabled{ opacity: .5; cursor: not-allowed; }
+
+/* iOS zooms the page when focusing inputs smaller than 16px. */
+@media (pointer: coarse){
+	.input{ font-size: 16px; }
+}

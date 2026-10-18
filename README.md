@@ -1,25 +1,36 @@
 # Ana Leave Manager
 
-Simple React + Vite app to track leave for two people (local browser storage).
+React + Vite app to track annual leave for two people, with a full-year calendar, per-leave-year balances and UK/HK bank holidays.
 
-Quick start:
+## Data storage (GitHub Gist sync)
+
+Data is kept in a secret GitHub gist (`leave-data.json`) so iPad, Windows and any other device share one copy. Each device also caches it in `localStorage` (`ana-leave`) so it works offline and syncs when back online.
+
+1. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with account permission **Gists: Read and write** and no repository access.
+2. In the app, open **Sync**, paste the token and tap **Create new gist** (uploads the data currently on that device).
+3. On each other device, paste the same gist ID and token and tap **Connect**.
+
+Edits save automatically about a second after each change. If two devices change the data at the same time, a banner asks which copy to keep. **Export JSON** / **Import JSON** in the Sync panel are for backups.
+
+## Asking an AI agent for advice
+
+Every sync also writes `leave-summary.json` to the gist: balances per leave year (taken, booked, remaining, at risk of being lost), all booked leave, bank holidays, and suggested bridge-the-weekend windows for taking leave together. It is refreshed whenever the data changes and at least once a day when the app is opened.
+
+The Sync panel shows its public URL (`https://gist.githubusercontent.com/<owner>/<gist-id>/raw/leave-summary.json`). It needs no auth. **Copy prompt for agent** puts a ready-made prompt that includes the URL on the clipboard; paste it into any agent that can fetch URLs. GitHub serves that URL with `Cache-Control: max-age=300`, so an agent may see data up to 5 minutes old.
+
+## iPad
+
+Open the site in Safari, then Share → **Add to Home Screen**. It runs full-screen as an app, and you can tap the first and last day on the calendar to select leave.
+
+## Development
 
 ```bash
 npm install
 npm run dev
+npm run deploy   # builds and pushes dist/ to the gh-pages branch
 ```
 
-Deployment:
+GitHub Pages serves from the `gh-pages` branch root at `/analeave/`.
 
-```bash
-npm run deploy
-```
-
-This repo deploys to the `gh-pages` branch with `npm run deploy`. GitHub Pages should be configured to serve from the `gh-pages` branch root.
-
-Notes:
-- Tailwind-powered UI with a full-year calendar view; pick year in the header.
-- Data saved in browser `localStorage` under key `ana-leave`.
-- Bank holidays: edit `src/data/holidays.js` to add years or adjust regions (UK/HK examples included, 2025-2028).
-- Leave form defaults to adding leave for both people; switch to individual if needed.
-- Adjust carryover/purchased/earned per leave-year in the Summary panel (caps applied from config).
+- Bank holidays: edit `src/data/holidays.js` to add years or adjust regions.
+- Carry-over, purchased and earned days per leave year are edited in the Summary panel (caps come from each person's config).

@@ -19,7 +19,9 @@ export default function Summary({ data, setData, year }){
     })
   }, [data.entries])
 
-  const remove = (id)=>{
+  const remove = (entry)=>{
+    if(!confirm(`Delete ${data.people[entry.person].label}'s leave ${formatDate(entry.start)} → ${formatDate(entry.end)}?`)) return
+    const id = entry.id
     setData(prev => ({...prev, entries: prev.entries.filter(e=>e.id!==id)}))
   }
 
@@ -125,7 +127,7 @@ export default function Summary({ data, setData, year }){
               </div>
               {e.note && <div className="text-xs text-slate-300 mt-1">{e.note}</div>}
             </div>
-            <button className="text-rose-300 text-sm hover:text-rose-200" onClick={()=>remove(e.id)}>Delete</button>
+            <button type="button" className="text-rose-300 text-sm hover:text-rose-200 px-2 py-2 -mr-2" onClick={()=>remove(e)}>Delete</button>
           </li>
         ))}
       </ul>
