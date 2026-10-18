@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cacheData, loadData } from './leaveService.js'
-import { AGENT_URL, GIST_ID, readGist, writeGist } from './gistStore.js'
+import { AGENT_URL, BUILT_IN_TOKEN, GIST_ID, readGist, writeGist } from './gistStore.js'
 
 const CONFIG_KEY = 'ana-leave-sync'
 const META_KEY = 'ana-leave-sync-meta'
@@ -66,7 +66,7 @@ export default function useGistSync(){
   }
 
   const push = async () => {
-    const token = configRef.current?.token
+    const token = configRef.current?.token || BUILT_IN_TOKEN
     const gistId = GIST_ID
     if(!token){
       setStatus({ state: 'readonly', message: 'Read-only (no token). Changes stay on this device.' })
@@ -87,7 +87,7 @@ export default function useGistSync(){
   }
 
   const pull = async () => {
-    const token = configRef.current?.token
+    const token = configRef.current?.token || BUILT_IN_TOKEN
     const gistId = GIST_ID
     setStatus({ state: 'loading', message: 'Checking for changes…' })
     const remote = await readGist(gistId, token)

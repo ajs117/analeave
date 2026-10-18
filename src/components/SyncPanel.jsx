@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { readDataFromFile } from '../utils/leaveService'
-import { GIST_ID, GIST_OWNER } from '../utils/gistStore'
+import { BUILT_IN_TOKEN, GIST_ID, GIST_OWNER } from '../utils/gistStore'
 
 const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new'
 
@@ -56,25 +56,26 @@ export default function SyncPanel({ sync, onClose }){
 
       <p className="text-sm text-slate-300">
         Data lives in <a className="underline" href={`https://gist.github.com/${GIST_OWNER}/${GIST_ID}`} target="_blank" rel="noreferrer">this gist</a>.
-        Anyone with the app can view it; to save changes, paste a <a className="underline" href={TOKEN_URL} target="_blank" rel="noreferrer">fine-grained token</a> with
-        account permission <strong>Gists: Read and write</strong> and no repository access.
+        {!BUILT_IN_TOKEN && <> To save changes from this device, paste a <a className="underline" href={TOKEN_URL} target="_blank" rel="noreferrer">fine-grained token</a> with
+        account permission <strong>Gists: Read and write</strong> and no repository access.</>}
       </p>
 
-      <label className="block text-sm text-slate-200">GitHub token
-        <input className="input mt-1 font-mono" type="password" value={token} onChange={e=>setToken(e.target.value)}
-          placeholder="github_pat_…" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-      </label>
+      {!BUILT_IN_TOKEN && (
+        <label className="block text-sm text-slate-200">GitHub token
+          <input className="input mt-1 font-mono" type="password" value={token} onChange={e=>setToken(e.target.value)}
+            placeholder="github_pat_…" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+        </label>
+      )}
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn-primary" disabled={!token.trim()} onClick={()=>connect(token)}>Save token</button>
+        {!BUILT_IN_TOKEN && <button type="button" className="btn-primary" disabled={!token.trim()} onClick={()=>connect(token)}>Save token</button>}
         <button type="button" className="btn-secondary" onClick={()=>syncNow()}>Sync now</button>
         {hasToken && <button type="button" className="btn-secondary" onClick={()=>{ if(confirm('Remove the token? This device becomes read-only.')){ disconnect(); setToken('') } }}>Remove token</button>}
       </div>
 
       <div className="text-xs text-slate-400">{status.message}</div>
 
-      {(
-        <div className="border-t border-white/10 pt-3 space-y-2">
+      <div className="border-t border-white/10 pt-3 space-y-2">
           <div className="text-sm text-slate-200">Agent endpoint <span className="text-slate-400">· paste into any AI agent that can fetch URLs</span></div>
           <div className="text-xs font-mono text-slate-300 break-all bg-white/5 rounded-lg px-3 py-2">{agentUrl}</div>
           <div className="flex flex-wrap gap-2">
@@ -83,7 +84,6 @@ export default function SyncPanel({ sync, onClose }){
             <a className="btn-secondary" href={agentUrl} target="_blank" rel="noreferrer">Open</a>
           </div>
         </div>
-      )}
 
       <div className="border-t border-white/10 pt-3 flex flex-wrap items-center gap-2">
         <span className="text-xs text-slate-400 mr-auto">Backup</span>
