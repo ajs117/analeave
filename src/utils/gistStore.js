@@ -6,8 +6,10 @@ const API = 'https://api.github.com'
 const NO_STORE = { cache: 'no-store' }
 export const GIST_FILE = 'leave-data.json'
 export const SUMMARY_FILE = 'leave-summary.json'
+export const GIST_ID = '693417ced3f2fbc4078d5e920fd7d868'
+export const GIST_OWNER = 'ajs117'
 
-export const summaryUrl = (owner, gistId) => `https://gist.githubusercontent.com/${owner}/${gistId}/raw/${SUMMARY_FILE}`
+export const AGENT_URL = `https://gist.githubusercontent.com/${GIST_OWNER}/${GIST_ID}/raw/${SUMMARY_FILE}`
 
 function files(data){
   return {
@@ -42,7 +44,6 @@ async function unpack(gist){
   return {
     data: normalizeData(JSON.parse(content)),
     version: gist.history?.[0]?.version || gist.updated_at,
-    owner: gist.owner?.login,
     summaryFresh: summaryDate === dateToLocalISO(new Date()),
   }
 }
@@ -57,16 +58,4 @@ export async function writeGist(gistId, token, data){
     body: JSON.stringify({ files: files(data) }),
   })
   return gist.history?.[0]?.version || gist.updated_at
-}
-
-export async function createGist(token, data){
-  const gist = await request(`${API}/gists`, token, {
-    method: 'POST',
-    body: JSON.stringify({
-      description: 'Analeave leave data',
-      public: false,
-      files: files(data),
-    }),
-  })
-  return { id: gist.id, version: gist.history?.[0]?.version || gist.updated_at, owner: gist.owner?.login }
 }

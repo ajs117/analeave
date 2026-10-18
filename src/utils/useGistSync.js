@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cacheData, loadData } from './leaveService.js'
-import { createGist, readGist, summaryUrl, writeGist } from './gistStore.js'
+import { AGENT_URL, GIST_ID, readGist, writeGist } from './gistStore.js'
 
 const CONFIG_KEY = 'ana-leave-sync'
 const META_KEY = 'ana-leave-sync-meta'
@@ -35,7 +35,6 @@ export default function useGistSync(){
   const dataRef = useRef(data)
   const configRef = useRef(config)
   const metaRef = useRef(readJSON(META_KEY, { baseVersion: null, dirty: false }))
-  const [owner, setOwner] = useState(metaRef.current.owner || null)
   const editSeqRef = useRef(0)
   const busyRef = useRef(false)
   const rerunRef = useRef(false)
@@ -49,10 +48,6 @@ export default function useGistSync(){
   const setMeta = (patch) => {
     metaRef.current = { ...metaRef.current, ...patch }
     writeJSON(META_KEY, metaRef.current)
-  }
-
-  const noteOwner = (login) => {
-    if(login && login !== metaRef.current.owner){ setMeta({ owner: login }); setOwner(login) }
   }
 
   const markSynced = (version) => {
@@ -71,14 +66,14 @@ export default function useGistSync(){
   }
 
   const push = async () => {
-    const { gistId, token } = configRef.current || {}
+    const token = configRef.current?.token
+    const gistId = GIST_ID
     if(!token){
       setStatus({ state: 'readonly', message: 'Read-only (no token). Changes stay on this device.' })
       return
     }
     setStatus({ state: 'saving', message: 'Saving…' })
     const remote = await readGist(gistId, token)
-    noteOwner(remote.owner)
     if(remote.version !== metaRef.current.baseVersion && !sameData(remote.data, dataRef.current)){
       setConflict(remote)
       setStatus({ state: 'conflict', message: 'Changed on another device.' })
@@ -92,10 +87,10 @@ export default function useGistSync(){
   }
 
   const pull = async () => {
-    const { gistId, token } = configRef.current || {}
+    const token = configRef.current?.token
+    const gistId = GIST_ID
     setStatus({ state: 'loading', message: 'Checking for changes…' })
     const remote = await readGist(gistId, token)
-    noteOwner(remote.owner)
     if(metaRef.current.dirty){
       if(remote.version === metaRef.current.baseVersion || sameData(remote.data, dataRef.current)){
         setMeta({ baseVersion: remote.version })
@@ -117,10 +112,6 @@ export default function useGistSync(){
   }
 
   const sync = useCallback(() => {
-    if(!configRef.current?.gistId){
-      setStatus({ state: 'local', message: 'Not synced. Data is kept on this device only.' })
-      return Promise.resolve()
-    }
     return exclusive(async () => {
       try{
         if(metaRef.current.dirty) await push()
@@ -151,29 +142,16 @@ export default function useGistSync(){
     }
   }, [sync])
 
-  const connect = useCallback(({ gistId, token }) => {
-    const next = { gistId: gistId.trim(), token: (token || '').trim() }
+  const connect = useCallback((token) => {
+    const next = { token: (token || '').trim() }
     writeJSON(CONFIG_KEY, next)
     setConfig(next)
   }, [])
-
-  const createNew = useCallback(async (token) => {
-    try{
-      setStatus({ state: 'saving', message: 'Creating gist…' })
-      const { id, version, owner: login } = await createGist(token.trim(), dataRef.current)
-      setMeta({ baseVersion: version, dirty: false })
-      noteOwner(login)
-      connect({ gistId: id, token })
-    }catch(error){
-      setStatus({ state: 'error', message: describeError(error) })
-    }
-  }, [connect])
 
   const disconnect = useCallback(() => {
     writeJSON(CONFIG_KEY, null)
     writeJSON(META_KEY, null)
     metaRef.current = { baseVersion: null, dirty: false }
-    setOwner(null)
     setConflict(null)
     setConfig(null)
   }, [])
@@ -192,7 +170,5 @@ export default function useGistSync(){
     }
   }, [conflict, sync])
 
-  const agentUrl = config?.gistId && owner ? summaryUrl(owner, config.gistId) : null
-
-  return { data, editData, config, status, agentUrl, conflict, connect, createNew, disconnect, resolveConflict, syncNow: sync }
+  return { data, editData, config, status, agentUrl: AGENT_URL, conflict, connect, disconnect, resolveConflict, syncNow: sync }
 }

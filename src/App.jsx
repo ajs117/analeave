@@ -24,7 +24,7 @@ export default function App(){
   const { data, editData, status, conflict, resolveConflict } = sync
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [draft, setDraft] = useState(emptyDraft)
-  const [showSync, setShowSync] = useState(() => !sync.config?.gistId)
+  const [showSync, setShowSync] = useState(() => !sync.config?.token)
 
   const updateDraft = (patch) => setDraft(d => ({ ...d, ...patch, picking: false }))
 

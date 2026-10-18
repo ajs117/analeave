@@ -6,9 +6,7 @@ React + Vite app to track annual leave for two people, with a full-year calendar
 
 Data is kept in a secret GitHub gist (`leave-data.json`) so iPad, Windows and any other device share one copy. Each device also caches it in `localStorage` (`ana-leave`) so it works offline and syncs when back online.
 
-1. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with account permission **Gists: Read and write** and no repository access.
-2. In the app, open **Sync**, paste the token and tap **Create new gist** (uploads the data currently on that device).
-3. On each other device, paste the same gist ID and token and tap **Connect**.
+The gist ID is hard-coded in `src/utils/gistStore.js` (`GIST_ID`, `GIST_OWNER`), so any device opening the app loads the data straight away, read-only. To save changes from a device, open **Sync** and paste a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with account permission **Gists: Read and write** and no repository access.
 
 Edits save automatically about a second after each change. If two devices change the data at the same time, a banner asks which copy to keep. **Export JSON** / **Import JSON** in the Sync panel are for backups.
 

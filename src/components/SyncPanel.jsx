@@ -1,11 +1,11 @@
 import React, { useRef, useState } from 'react'
 import { readDataFromFile } from '../utils/leaveService'
+import { GIST_ID, GIST_OWNER } from '../utils/gistStore'
 
 const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new'
 
 export default function SyncPanel({ sync, onClose }){
-  const { config, data, editData, connect, createNew, disconnect, syncNow, status, agentUrl } = sync
-  const [gistId, setGistId] = useState(config?.gistId || '')
+  const { config, data, editData, connect, disconnect, syncNow, status, agentUrl } = sync
   const [token, setToken] = useState(config?.token || '')
   const fileRef = useRef(null)
   const [copied, setCopied] = useState('')
@@ -21,7 +21,7 @@ export default function SyncPanel({ sync, onClose }){
   }
 
   const agentPrompt = ()=>`Fetch my annual leave data from ${agentUrl} (JSON; read its "about" and "rules" fields first). Today is ${new Date().toISOString().slice(0, 10)}. Use it to advise me on planning our annual leave.`
-  const connected = Boolean(config?.gistId)
+  const hasToken = Boolean(config?.token)
 
   const exportJson = ()=>{
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -56,44 +56,25 @@ export default function SyncPanel({ sync, onClose }){
       </div>
 
       <p className="text-sm text-slate-300">
-        Data is saved to a secret gist so every device shares one copy, and a ready-computed summary is published for AI agents.
-        Create a <a className="underline" href={TOKEN_URL} target="_blank" rel="noreferrer">fine-grained token</a> with
-        account permission <strong>Gists: Read and write</strong> and no repository access. Paste the same token and gist ID on each device.
+        Data lives in <a className="underline" href={`https://gist.github.com/${GIST_OWNER}/${GIST_ID}`} target="_blank" rel="noreferrer">this gist</a>.
+        Anyone with the app can view it; to save changes, paste a <a className="underline" href={TOKEN_URL} target="_blank" rel="noreferrer">fine-grained token</a> with
+        account permission <strong>Gists: Read and write</strong> and no repository access.
       </p>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="block text-sm text-slate-200">Gist ID
-          <input className="input mt-1 font-mono" value={gistId} onChange={e=>setGistId(e.target.value)}
-            placeholder="leave blank to create one" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-        </label>
-        <label className="block text-sm text-slate-200">GitHub token
-          <input className="input mt-1 font-mono" type="password" value={token} onChange={e=>setToken(e.target.value)}
-            placeholder="github_pat_…" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-        </label>
-      </div>
+      <label className="block text-sm text-slate-200">GitHub token
+        <input className="input mt-1 font-mono" type="password" value={token} onChange={e=>setToken(e.target.value)}
+          placeholder="github_pat_…" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+      </label>
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="btn-primary" disabled={!gistId.trim()}
-          onClick={()=>connect({ gistId: gistId.replace(/^.*\//, ''), token })}>
-          {connected ? 'Update' : 'Connect'}
-        </button>
-        <button type="button" className="btn-secondary" disabled={!token.trim() || Boolean(gistId.trim())}
-          onClick={()=>createNew(token)}
-          title="Creates a new secret gist containing the data currently on this device">
-          Create new gist
-        </button>
-        {connected && <button type="button" className="btn-secondary" onClick={()=>syncNow()}>Sync now</button>}
-        {connected && <button type="button" className="btn-secondary" onClick={()=>{ if(confirm('Stop syncing on this device? Data stays here.')){ disconnect(); setGistId(''); setToken('') } }}>Disconnect</button>}
+        <button type="button" className="btn-primary" disabled={!token.trim()} onClick={()=>connect(token)}>Save token</button>
+        <button type="button" className="btn-secondary" onClick={()=>syncNow()}>Sync now</button>
+        {hasToken && <button type="button" className="btn-secondary" onClick={()=>{ if(confirm('Remove the token? This device becomes read-only.')){ disconnect(); setToken('') } }}>Remove token</button>}
       </div>
 
-      {connected && (
-        <div className="text-xs text-slate-400 break-all">
-          Gist: <a className="underline" href={`https://gist.github.com/${config.gistId}`} target="_blank" rel="noreferrer">{config.gistId}</a>
-          {' · '}{status.message}
-        </div>
-      )}
+      <div className="text-xs text-slate-400">{status.message}</div>
 
-      {agentUrl && (
+      {(
         <div className="border-t border-white/10 pt-3 space-y-2">
           <div className="text-sm text-slate-200">Agent endpoint <span className="text-slate-400">· paste into any AI agent that can fetch URLs</span></div>
           <div className="text-xs font-mono text-slate-300 break-all bg-white/5 rounded-lg px-3 py-2">{agentUrl}</div>
