@@ -8,6 +8,7 @@ import useGistSync from './utils/useGistSync'
 
 const emptyDraft = { person: 'both', start: '', end: '', note: '', picking: false }
 
+const NOTEWORTHY = new Set(['saving', 'readonly', 'conflict', 'error'])
 const STATUS_STYLES = {
   saved: 'bg-emerald-500/20 text-emerald-100',
   saving: 'bg-sky-500/20 text-sky-100',
@@ -24,7 +25,7 @@ export default function App(){
   const { data, editData, status, conflict, resolveConflict } = sync
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [draft, setDraft] = useState(emptyDraft)
-  const [showSync, setShowSync] = useState(() => !sync.config?.token)
+  const [showSync, setShowSync] = useState(false)
 
   const updateDraft = (patch) => setDraft(d => ({ ...d, ...patch, picking: false }))
 
@@ -71,13 +72,17 @@ export default function App(){
             <h1 className="text-3xl font-bold text-white">Analeave</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={()=>setShowSync(v=>!v)}
-              className={`pill ${STATUS_STYLES[status.state] || STATUS_STYLES.idle}`}>
-              {status.message || 'Sync'}
-            </button>
+            {NOTEWORTHY.has(status.state) && (
+              <button type="button" onClick={()=>setShowSync(true)}
+                className={`pill ${STATUS_STYLES[status.state] || STATUS_STYLES.idle}`}>
+                {status.message}
+              </button>
+            )}
             <select className="input w-28" aria-label="Calendar year" value={year} onChange={e=>setYear(parseInt(e.target.value,10))}>
               {yearsAvailable.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
+            <button type="button" aria-label="Settings" aria-expanded={showSync} onClick={()=>setShowSync(v=>!v)}
+              className="btn-secondary px-3 text-lg leading-none">⋯</button>
           </div>
         </header>
 

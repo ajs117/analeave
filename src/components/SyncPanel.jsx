@@ -49,8 +49,7 @@ export default function SyncPanel({ sync, onClose }){
     <div className="glass-card space-y-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="pill bg-violet-500/20 text-violet-100">Sync</span>
-          <h2 className="section-title">GitHub Gist storage</h2>
+          <h2 className="section-title">Settings</h2>
         </div>
         <button type="button" className="text-slate-300 text-sm" onClick={onClose}>Close</button>
       </div>
